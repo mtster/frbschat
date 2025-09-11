@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Protocol — Chat</title>
 
-  <link rel="manifest" href="manifest.json">
-<link rel="icon" href="logo-192.png">
-<link rel="apple-touch-icon" href="logo-192.png">
+  <link rel="manifest" href="manifest.json"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="Protocol"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -64,7 +62,14 @@
   <!-- toast -->
   <div id="toast" class="pointer-events-none"></div>
 
-  <!-- main script (relative path to avoid subpath issues) -->
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <!-- Firebase configuration -->
+  <script src="firebase-config.js"></script>
+
+  <!-- main script -->
   <script src="app.js"></script>
 </body>
 </html>
