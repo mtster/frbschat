@@ -62,14 +62,9 @@
   <!-- toast -->
   <div id="toast" class="pointer-events-none"></div>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- Firebase + App scripts using modules -->
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="app.js"></script>
 
-  <!-- Firebase configuration -->
-  <script src="firebase-config.js"></script>
-
-  <!-- main script -->
-  <script src="app.js"></script>
 </body>
 </html>
