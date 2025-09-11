@@ -66,28 +66,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function initChat() {
-    off(messagesRef); // remove previous listeners
-    messages = [];
-    onChildAdded(ref(db, 'protocol-messages'), snapshot => {
-      const msg = snapshot.val();
-      messages.push(msg);
-      renderMessages();
-    });
-  }
+  messages = []; // clear old messages
+  messagesRef.off(); // remove previous listeners
 
-  async function sendMessage(text) {
-    if (!text.trim()) return;
-    const msg = { timestamp: new Date().toISOString(), user: nickname, message: text.trim() };
+  messagesRef.limitToLast(50).on('child_added', snapshot => {
+    const msg = snapshot.val();
     messages.push(msg);
     renderMessages();
+  });
+}
 
-    try {
-      await push(messagesRef, msg);
-    } catch (err) {
-      console.error('Send failed', err);
-      showToast('Network error sending message.');
-    }
+
+  async function sendMessage(text) {
+  if (!text.trim()) return;
+
+  try {
+    // Push message to Firebase
+    await messagesRef.push({
+      timestamp: new Date().toISOString(),
+      user: nickname,
+      message: text.trim()
+    });
+    
+    // Clear input AFTER push
+    messageInput.value = '';
+  } catch (err) {
+    console.error('Send failed', err);
+    showToast('Network error sending message.');
   }
+}
+
 
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
