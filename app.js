@@ -1,10 +1,9 @@
-/* app.js - Protocol Chat (Firebase version) */
+// app.js - Protocol Chat (Firebase modular v9+)
+
+import { db } from './firebase-config.js';
+import { ref, push, onChildAdded, limitToLast, off } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Firebase initialization
-  const db = firebase.database();
-  const messagesRef = db.ref('protocol-messages');
-
   const overlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
   const nicknameSave = document.getElementById('nicknameSave');
@@ -17,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let nickname = localStorage.getItem('protocol_nickname') || '';
   let messages = [];
+
+  const messagesRef = ref(db, 'protocol-messages');
 
   function showToast(text, ms = 3500) {
     toastRoot.innerHTML = '';
@@ -64,32 +65,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30);
   }
 
-  // Listen for new messages in Firebase
   function initChat() {
-    messagesRef.off(); // remove any previous listeners
-    messagesRef.limitToLast(50).on('child_added', snapshot => {
+    off(messagesRef); // remove previous listeners
+    messages = [];
+    onChildAdded(ref(db, 'protocol-messages'), snapshot => {
       const msg = snapshot.val();
       messages.push(msg);
       renderMessages();
     });
   }
 
-  // Send a message to Firebase
   async function sendMessage(text) {
     if (!text.trim()) return;
     const msg = { timestamp: new Date().toISOString(), user: nickname, message: text.trim() };
-    messages.push(msg); // optimistic update
+    messages.push(msg);
     renderMessages();
 
     try {
-      await messagesRef.push(msg);
+      await push(messagesRef, msg);
     } catch (err) {
       console.error('Send failed', err);
       showToast('Network error sending message.');
     }
   }
 
-  // Nickname setup
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
     if (!val) { showToast('Enter a nickname.'); return; }
@@ -105,7 +104,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') { e.preventDefault(); nicknameSave.click(); }
   });
 
-  // Message form submit
   composeForm.addEventListener('submit', e => {
     e.preventDefault();
     if (!nickname) { showOverlay(); return; }
@@ -126,7 +124,6 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.serviceWorker.register('service-worker.js').catch(err => console.warn(err));
   }
 
-  // Startup
   if (!nickname) showOverlay();
   else { hideOverlay(); setConnectedAsText(); initChat(); }
 });
