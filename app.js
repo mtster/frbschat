@@ -1,7 +1,14 @@
 // app.js - Protocol Chat (Firebase modular v9+)
 
 import { db } from './firebase-config.js';
-import { ref, push, onChildAdded, limitToLast, off } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+import {
+  ref,
+  push,
+  onChildAdded,
+  query,
+  limitToLast,
+  off
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('nicknameOverlay');
@@ -18,6 +25,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let messages = [];
 
   const messagesRef = ref(db, 'protocol-messages');
+
+  // For managing listener cleanup
+  let currentQueryRef = null;
+  let childAddedListener = null;
 
   function showToast(text, ms = 3500) {
     toastRoot.innerHTML = '';
@@ -66,36 +77,51 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function initChat() {
-  messages = []; // clear old messages
-  messagesRef.off(); // remove previous listeners
+    // Clear old messages and remove previous listener (if any)
+    messages = [];
+    if (currentQueryRef && childAddedListener) {
+      // detach previous listener
+      off(currentQueryRef, 'child_added', childAddedListener);
+      currentQueryRef = null;
+      childAddedListener = null;
+    }
 
-  messagesRef.limitToLast(50).on('child_added', snapshot => {
-    const msg = snapshot.val();
-    messages.push(msg);
-    renderMessages();
-  });
-}
+    // Create a query for the last 50 messages
+    const q = query(messagesRef, limitToLast(50));
+    currentQueryRef = q;
 
+    // Listener function
+    childAddedListener = (snapshot) => {
+      const msg = snapshot.val();
+      // Add message object — guard if null
+      if (msg) {
+        messages.push(msg);
+        renderMessages();
+      }
+    };
+
+    // Attach child_added listener (modular form)
+    onChildAdded(q, childAddedListener);
+  }
 
   async function sendMessage(text) {
-  if (!text.trim()) return;
+    if (!text.trim()) return;
 
-  try {
-    // Push message to Firebase
-    await messagesRef.push({
-      timestamp: new Date().toISOString(),
-      user: nickname,
-      message: text.trim()
-    });
-    
-    // Clear input AFTER push
-    messageInput.value = '';
-  } catch (err) {
-    console.error('Send failed', err);
-    showToast('Network error sending message.');
+    try {
+      // Push message to Firebase (modular API)
+      await push(messagesRef, {
+        timestamp: new Date().toISOString(),
+        user: nickname,
+        message: text.trim()
+      });
+
+      // Clear input AFTER successful push
+      messageInput.value = '';
+    } catch (err) {
+      console.error('Send failed', err);
+      showToast('Network error sending message.');
+    }
   }
-}
-
 
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
@@ -117,8 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!nickname) { showOverlay(); return; }
     const txt = messageInput.value;
     if (!txt.trim()) return;
+    // Optimistic UI: optionally render immediately? currently we let realtime listener push it in.
     sendMessage(txt);
-    messageInput.value = '';
   });
 
   messageInput.addEventListener('keydown', e => {
