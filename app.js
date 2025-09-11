@@ -1,8 +1,9 @@
-/* app.js - Protocol Chat */
+/* app.js - Protocol Chat (Firebase version) */
 
 document.addEventListener('DOMContentLoaded', () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbwlOAtrgztsRTZeWLwJ85xIwMajhQm9AYXaMeLisiRt0wn7kS3wvxBWWsz5YFQRaBHjPQ/exec';
-  const POLL_MS = 2500;
+  // Firebase initialization
+  const db = firebase.database();
+  const messagesRef = db.ref('protocol-messages');
 
   const overlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
@@ -16,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let nickname = localStorage.getItem('protocol_nickname') || '';
   let messages = [];
-  let pollTimer = null;
 
   function showToast(text, ms = 3500) {
     toastRoot.innerHTML = '';
@@ -43,11 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const bubble = document.createElement('div');
       bubble.className = 'bubble p-3 rounded-lg';
-      if (isSelf) {
-        bubble.classList.add('bg-gradient-to-br','from-emerald-500','to-green-400','text-black','rounded-br-none');
-      } else {
-        bubble.classList.add('bg-zinc-900','text-white','rounded-bl-none','border','border-zinc-800');
-      }
+      if (isSelf) bubble.classList.add('bg-gradient-to-br','from-emerald-500','to-green-400','text-black','rounded-br-none');
+      else bubble.classList.add('bg-zinc-900','text-white','rounded-bl-none','border','border-zinc-800');
 
       const nameEl = document.createElement('div');
       nameEl.className = 'muted mb-1';
@@ -61,75 +58,54 @@ document.addEventListener('DOMContentLoaded', () => {
       wrapper.appendChild(bubble);
       messagesList.appendChild(wrapper);
     });
+
     setTimeout(() => {
       messagesContainer.scrollTop = messagesContainer.scrollHeight + 200;
     }, 30);
   }
 
-  async function fetchLatest() {
-    try {
-      const res = await fetch(API_URL + '?t=' + Date.now(), { method: 'GET', cache: 'no-store' });
-      const json = await res.json();
-      if (json.success) {
-        messages = json.messages || [];
-        renderMessages();
-      }
-    } catch (err) {
-      console.error('Fetch failed', err);
-      showToast('Network error fetching messages.');
-    }
-  }
-
-  async function sendMessage(text) {
-  if (!text.trim()) return;
-  const optimistic = { timestamp: new Date().toISOString(), user: nickname, message: text.trim() };
-  messages.push(optimistic);
-  renderMessages();
-
-  try {
-    const body = new FormData();
-    body.append('user', nickname);
-    body.append('message', text.trim());
-
-    const r = await fetch(API_URL, {
-      method: 'POST',
-      body // no headers → browser sets multipart/form-data automatically
+  // Listen for new messages in Firebase
+  function initChat() {
+    messagesRef.off(); // remove any previous listeners
+    messagesRef.limitToLast(50).on('child_added', snapshot => {
+      const msg = snapshot.val();
+      messages.push(msg);
+      renderMessages();
     });
+  }
 
-    const j = await r.json();
-    if (!j.success) {
-      showToast('Server error saving message.');
-    } else {
-      await fetchLatest();
+  // Send a message to Firebase
+  async function sendMessage(text) {
+    if (!text.trim()) return;
+    const msg = { timestamp: new Date().toISOString(), user: nickname, message: text.trim() };
+    messages.push(msg); // optimistic update
+    renderMessages();
+
+    try {
+      await messagesRef.push(msg);
+    } catch (err) {
+      console.error('Send failed', err);
+      showToast('Network error sending message.');
     }
-  } catch (err) {
-    console.error('Send failed', err);
-    showToast('Network error sending message.');
-  }
-}
-
-
-  function startPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(fetchLatest, POLL_MS);
   }
 
+  // Nickname setup
   nicknameSave.addEventListener('click', () => {
-    const v = nicknameInput.value.trim();
-    if (!v) { showToast('Enter a nickname.'); return; }
-    nickname = v;
+    const val = nicknameInput.value.trim();
+    if (!val) { showToast('Enter a nickname.'); return; }
+    nickname = val;
     localStorage.setItem('protocol_nickname', nickname);
     hideOverlay();
     setConnectedAsText();
-    fetchLatest();   // fetch right away
-    startPolling();
     showToast('Welcome, ' + nickname + '!');
+    initChat();
   });
 
   nicknameInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); nicknameSave.click(); }
   });
 
+  // Message form submit
   composeForm.addEventListener('submit', e => {
     e.preventDefault();
     if (!nickname) { showOverlay(); return; }
@@ -151,12 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Startup
-  if (!nickname) {
-    showOverlay();
-  } else {
-    hideOverlay();
-    setConnectedAsText();
-    fetchLatest();   // fetch immediately on load
-    startPolling();
-  }
+  if (!nickname) showOverlay();
+  else { hideOverlay(); setConnectedAsText(); initChat(); }
 });
