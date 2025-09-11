@@ -104,24 +104,32 @@ document.addEventListener('DOMContentLoaded', () => {
     onChildAdded(q, childAddedListener);
   }
 
-  async function sendMessage(text) {
-    if (!text.trim()) return;
+    async function sendMessage(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
     try {
-      // Push message to Firebase (modular API)
       await push(messagesRef, {
         timestamp: new Date().toISOString(),
         user: nickname,
-        message: text.trim()
+        message: trimmed
       });
-
-      // Clear input AFTER successful push
+      // ✅ clear after success
       messageInput.value = '';
     } catch (err) {
       console.error('Send failed', err);
       showToast('Network error sending message.');
     }
   }
+
+  composeForm.addEventListener('submit', e => {
+    e.preventDefault();
+    if (!nickname) { showOverlay(); return; }
+    const txt = messageInput.value;
+    if (!txt.trim()) return;
+    sendMessage(txt); // ✅ don't clear here, handled in sendMessage
+  });
+
 
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
