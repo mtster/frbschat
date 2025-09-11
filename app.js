@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const messagesRef = ref(db, 'protocol-messages');
 
-  // For managing listener cleanup
   let currentQueryRef = null;
   let childAddedListener = null;
 
@@ -77,59 +76,43 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function initChat() {
-    // Clear old messages and remove previous listener (if any)
+    // Clear old state
     messages = [];
     if (currentQueryRef && childAddedListener) {
-      // detach previous listener
       off(currentQueryRef, 'child_added', childAddedListener);
-      currentQueryRef = null;
-      childAddedListener = null;
     }
 
-    // Create a query for the last 50 messages
+    // Query last 50 messages
     const q = query(messagesRef, limitToLast(50));
     currentQueryRef = q;
 
-    // Listener function
+    // Attach listener
     childAddedListener = (snapshot) => {
       const msg = snapshot.val();
-      // Add message object — guard if null
       if (msg) {
         messages.push(msg);
         renderMessages();
       }
     };
-
-    // Attach child_added listener (modular form)
     onChildAdded(q, childAddedListener);
   }
 
-    async function sendMessage(text) {
+  async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
-
     try {
       await push(messagesRef, {
         timestamp: new Date().toISOString(),
         user: nickname,
         message: trimmed
       });
-      // ✅ clear after success
+      // ✅ clear after successful push
       messageInput.value = '';
     } catch (err) {
       console.error('Send failed', err);
       showToast('Network error sending message.');
     }
   }
-
-  composeForm.addEventListener('submit', e => {
-    e.preventDefault();
-    if (!nickname) { showOverlay(); return; }
-    const txt = messageInput.value;
-    if (!txt.trim()) return;
-    sendMessage(txt); // ✅ don't clear here, handled in sendMessage
-  });
-
 
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
@@ -151,8 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!nickname) { showOverlay(); return; }
     const txt = messageInput.value;
     if (!txt.trim()) return;
-    // Optimistic UI: optionally render immediately? currently we let realtime listener push it in.
-    sendMessage(txt);
+    sendMessage(txt); // ✅ no clearing here
   });
 
   messageInput.addEventListener('keydown', e => {
