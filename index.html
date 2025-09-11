@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Protocol — Chat</title>
+
+  <link rel="manifest" href="manifest.json">
+<link rel="icon" href="logo-192.png">
+<link rel="apple-touch-icon" href="logo-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="Protocol"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body { background:#000; color:#fff; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+    .bubble { max-width:78%; word-break:break-word; white-space:pre-wrap; }
+    .muted { color:rgba(255,255,255,0.55); font-size:0.78rem; }
+    #nicknameOverlay { transition: opacity .18s ease; }
+    #toast { position: fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:60; }
+  </style>
+</head>
+<body class="h-full flex flex-col">
+
+  <!-- Nickname overlay -->
+  <div id="nicknameOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
+    <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-6 rounded-lg shadow-lg">
+      <h1 class="text-2xl font-semibold mb-2">Welcome to Protocol</h1>
+      <p class="text-sm text-zinc-400 mb-4">Enter a nickname (one-time). Keep it short.</p>
+      <input id="nicknameInput" maxlength="24" placeholder="Your nickname" class="w-full p-3 rounded bg-[#0b0b0b] border border-zinc-700 placeholder-zinc-500 mb-3 focus:outline-none" />
+      <button id="nicknameSave" type="button" class="w-full py-2 rounded bg-green-600 hover:bg-green-500 text-black font-semibold">Start Chatting</button>
+      <p id="demoHint" class="text-xs text-zinc-500 mt-3">If you haven't set the backend URL yet, the app will run in local demo mode.</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="p-4 border-b border-zinc-900 bg-black/60 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-sm font-bold text-green-300">P</div>
+      <div>
+        <div class="text-sm font-semibold">Protocol</div>
+        <div id="connectedAs" class="muted">Not signed in</div>
+      </div>
+    </div>
+    <div class="text-xs muted">4 users max • PWA demo</div>
+  </header>
+
+  <!-- Messages -->
+  <main id="messagesContainer" class="flex-1 overflow-auto p-4">
+    <div id="messagesList" class="flex flex-col gap-3"></div>
+  </main>
+
+  <!-- Composer -->
+  <footer class="p-3 border-t border-zinc-900 bg-black/60">
+    <form id="composeForm" class="flex gap-3 items-end">
+      <textarea id="messageInput" rows="1" placeholder="Type a message..." class="flex-1 resize-none p-3 rounded-lg bg-[#0b0b0b] border border-zinc-800 focus:outline-none"></textarea>
+      <button id="sendBtn" type="submit" class="py-2 px-4 rounded-lg bg-green-600 hover:bg-green-500 text-black font-semibold">Send</button>
+    </form>
+  </footer>
+
+  <!-- toast -->
+  <div id="toast" class="pointer-events-none"></div>
+
+  <!-- main script (relative path to avoid subpath issues) -->
+  <script src="app.js"></script>
+</body>
+</html>
