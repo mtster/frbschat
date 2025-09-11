@@ -5,8 +5,7 @@ import { getDatabase } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-
 const firebaseConfig = {
   apiKey: "AIzaSyA-FwUy8WLXiYtT46F0f59gr461cEI_zmo",
   authDomain: "protocol-chat-b6120.firebaseapp.com",
-  databaseURL: "https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app/
-    ", // ✅ correct
+  databaseURL: "https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "protocol-chat-b6120",
   storageBucket: "protocol-chat-b6120.appspot.com",
   messagingSenderId: "969101904718",
