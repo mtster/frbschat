@@ -3,7 +3,7 @@ name: Deploy Firebase Functions
 on:
   push:
     branches:
-      - main  # change if your branch is different
+      - main  # keep this if your branch is main
 
 jobs:
   deploy:
@@ -21,11 +21,11 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Deploy Functions
+        working-directory: ${{ github.workspace }}  # <-- add this
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.firebase
-          echo "$FIREBASE_PRIVATE_KEY" | tr '\\n' '\n' > ~/.firebase/key.pem
+          echo "$FIREBASE_PRIVATE_KEY" | tr -d '\r' > service-account.json
           firebase deploy --only functions --project $FIREBASE_PROJECT_ID
