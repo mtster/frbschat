@@ -1,6 +1,6 @@
 // app.js - Protocol Chat (Firebase modular v9+)
 
-import { db } from './firebase-config.js';
+import { db, messaging } from './firebase-config.js';
 import {
   ref,
   push,
@@ -9,6 +9,10 @@ import {
   limitToLast,
   off
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+import {
+  getToken,
+  onMessage
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
 
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('nicknameOverlay');
@@ -134,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!nickname) { showOverlay(); return; }
     const txt = messageInput.value;
     if (!txt.trim()) return;
-    sendMessage(txt); // ✅ no clearing here
+    sendMessage(txt); // ✅ no clearing here, handled in sendMessage
   });
 
   messageInput.addEventListener('keydown', e => {
@@ -147,6 +151,37 @@ document.addEventListener('DOMContentLoaded', () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js').catch(err => console.warn(err));
   }
+
+  // 🔔 FCM Notifications Setup
+  async function initNotifications() {
+    if (!("Notification" in window)) return;
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        console.warn("Notifications not granted");
+        return;
+      }
+
+      // Replace with your actual VAPID key from Firebase Console
+      const vapidKey = "BAhd__iDU8kvxQ65a7ebCZCL8HpB9B07W4BkythVrR__ZweCuef7db6mzErw-3hPk7VhSG_LJHocyAbtDXZuAHI";
+
+      const token = await getToken(messaging, { vapidKey });
+      console.log("FCM Token:", token);
+
+      // Foreground messages
+      onMessage(messaging, (payload) => {
+        const { user, message } = payload.data || {};
+        if (user && message) {
+          new Notification(user, { body: message });
+        }
+      });
+    } catch (err) {
+      console.error("Notification setup failed:", err);
+    }
+  }
+
+  initNotifications();
 
   if (!nickname) showOverlay();
   else { hideOverlay(); setConnectedAsText(); initChat(); }
