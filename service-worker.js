@@ -4,11 +4,13 @@ const ASSETS = [
   '/index.html',
   '/app.js',
   '/manifest.json',
-  // add icons
   '/logo-192.png',
   '/logo-512.png'
 ];
 
+// ----------------------------
+// ⚡ Cache / PWA logic
+// ----------------------------
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
@@ -22,17 +24,16 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  const url = new URL(req.url);
 
-  // Try network first for API requests, fall back to cache
-  if (req.url.includes('/macros/s/')) { // heuristic for apps script domain
+  // Network-first for APIs
+  if (req.url.includes('/macros/s/')) {
     event.respondWith(
       fetch(req).catch(() => caches.match(req))
     );
     return;
   }
 
-  // For other requests: cache-first
+  // Cache-first for other requests
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req).then((res) => {
       return caches.open(CACHE_NAME).then((cache) => {
@@ -43,13 +44,15 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-
 // ----------------------------
 // 🔔 Firebase Messaging Support
 // ----------------------------
+
+// Import Firebase scripts (compat version required in service worker)
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
+// Initialize Firebase app
 firebase.initializeApp({
   apiKey: "AIzaSyA-FwUy8WLXiYtT46F0f59gr461cEI_zmo",
   authDomain: "protocol-chat-b6120.firebaseapp.com",
@@ -59,10 +62,12 @@ firebase.initializeApp({
   appId: "1:969101904718:web:8dcd0bc8690649235cec1f"
 });
 
+// Get messaging instance
 const messaging = firebase.messaging();
 
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
+  // payload.data contains your custom fields: user, message
   const { user, message } = payload.data || {};
   self.registration.showNotification(user || "Protocol Chat", {
     body: message || "New message",
