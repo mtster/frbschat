@@ -3,37 +3,41 @@ name: Deploy Firebase Functions
 on:
   push:
     branches:
-      - main  # change if your default branch is different
+      - main  # change if your branch name is different
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repo
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # 1️⃣ Checkout repository
+      - uses: actions/checkout@v3
 
-      # Step 2: Set up Node.js
-      - name: Setup Node.js
+      # 2️⃣ Set up Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # Step 3: Install Firebase CLI
-      - name: Install Firebase CLI
+      # 3️⃣ Install Firebase CLI
+      - name: Install Firebase Tools
         run: npm install -g firebase-tools
 
-      # Step 4: Deploy Functions using service account
+      # 4️⃣ Deploy functions using service account
       - name: Deploy Firebase Functions
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account.json
         run: |
-          # Convert escaped \n into real newlines for private key
-          mkdir -p ~/.firebase
-          echo "${FIREBASE_PRIVATE_KEY}" | sed 's/\\n/\n/g' > ~/.firebase/service-account.json
+          # Create service account JSON file
+          echo '{
+            "type": "service_account",
+            "project_id": "'"$FIREBASE_PROJECT_ID"'",
+            "private_key": "'"$FIREBASE_PRIVATE_KEY"'",
+            "client_email": "'"$FIREBASE_CLIENT_EMAIL"'"
+          }' | sed 's/\\n/\n/g' > service-account.json
 
-          # Authenticate Firebase CLI using the service account JSON
-          firebase deploy --only functions --project $FIREBASE_PROJECT_ID --token "$(cat ~/.firebase/service-account.json)"
+          # Deploy functions
+          firebase deploy --only functions --project $FIREBASE_PROJECT_ID
