@@ -3,7 +3,7 @@ name: Deploy Firebase Functions
 on:
   push:
     branches:
-      - main   # change if your branch name is different
+      - main  # change if your branch is different
 
 jobs:
   deploy:
@@ -26,5 +26,6 @@ jobs:
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: |
-          echo $FIREBASE_PRIVATE_KEY > key.pem
+          mkdir -p ~/.firebase
+          echo "$FIREBASE_PRIVATE_KEY" | tr '\\n' '\n' > ~/.firebase/key.pem
           firebase deploy --only functions --project $FIREBASE_PROJECT_ID
