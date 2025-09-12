@@ -1,7 +1,9 @@
 // firebase-config.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getDatabase } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+import { getMessaging } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
 
+// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyA-FwUy8WLXiYtT46F0f59gr461cEI_zmo",
   authDomain: "protocol-chat-b6120.firebaseapp.com",
@@ -12,5 +14,11 @@ const firebaseConfig = {
   appId: "1:969101904718:web:8dcd0bc8690649235cec1f"
 };
 
+// Initialize Firebase app
 const app = initializeApp(firebaseConfig);
+
+// Realtime Database reference
 export const db = getDatabase(app);
+
+// Firebase Cloud Messaging reference
+export const messaging = getMessaging(app);
