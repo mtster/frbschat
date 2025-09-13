@@ -1,18 +1,4 @@
-// app.js - Protocol Chat (Firebase modular v9+)
-
-import { db, messaging } from './firebase-config.js';
-import {
-  ref,
-  push,
-  onChildAdded,
-  query,
-  limitToLast,
-  off
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-import {
-  getToken,
-  onMessage
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
+// app.js - Protocol Chat (Cloudflare + Web Push)
 
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('nicknameOverlay');
@@ -28,10 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let nickname = localStorage.getItem('protocol_nickname') || '';
   let messages = [];
 
-  const messagesRef = ref(db, 'protocol-messages');
-
-  let currentQueryRef = null;
-  let childAddedListener = null;
+  const BASE_URL = '/'; // Use your Pages + Worker path
+  const MESSAGES_API = BASE_URL + 'protocolchatbinding';
 
   function showToast(text, ms = 3500) {
     toastRoot.innerHTML = '';
@@ -79,38 +63,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30);
   }
 
-  function initChat() {
-    // Clear old state
-    messages = [];
-    if (currentQueryRef && childAddedListener) {
-      off(currentQueryRef, 'child_added', childAddedListener);
-    }
-
-    // Query last 50 messages
-    const q = query(messagesRef, limitToLast(50));
-    currentQueryRef = q;
-
-    // Attach listener
-    childAddedListener = (snapshot) => {
-      const msg = snapshot.val();
-      if (msg) {
-        messages.push(msg);
-        renderMessages();
-      }
-    };
-    onChildAdded(q, childAddedListener);
-  }
+  // -----------------------
+  // WebSocket / Realtime simulation
+  // -----------------------
+  const ws = new WebSocket('wss://<YOUR_WS_ENDPOINT>'); // Use Cloudflare Worker WebSocket if desired
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    messages.push(msg);
+    renderMessages();
+  };
 
   async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    const msg = { user: nickname, message: trimmed, timestamp: new Date().toISOString() };
+    messages.push(msg);
+    renderMessages();
+
+    // Send to Worker to broadcast + trigger push
     try {
-      await push(messagesRef, {
-        timestamp: new Date().toISOString(),
-        user: nickname,
-        message: trimmed
+      await fetch(MESSAGES_API, {
+        method: 'POST',
+        body: JSON.stringify(msg),
+        headers: { 'Content-Type': 'application/json' }
       });
-      // ✅ clear after successful push
       messageInput.value = '';
     } catch (err) {
       console.error('Send failed', err);
@@ -126,7 +103,6 @@ document.addEventListener('DOMContentLoaded', () => {
     hideOverlay();
     setConnectedAsText();
     showToast('Welcome, ' + nickname + '!');
-    initChat();
   });
 
   nicknameInput.addEventListener('keydown', e => {
@@ -138,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!nickname) { showOverlay(); return; }
     const txt = messageInput.value;
     if (!txt.trim()) return;
-    sendMessage(txt); // ✅ no clearing here, handled in sendMessage
+    sendMessage(txt);
   });
 
   messageInput.addEventListener('keydown', e => {
@@ -148,41 +124,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js').catch(err => console.warn(err));
+  // -----------------------
+  // Service Worker + Web Push
+  // -----------------------
+  async function initNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    const registration = await navigator.serviceWorker.register('/service-worker.js');
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array('<YOUR_VAPID_PUBLIC_KEY>')
+    });
+
+    localStorage.setItem('pushSubscription', JSON.stringify(subscription));
+
+    // Optional: send join notification
+    await fetch(MESSAGES_API, {
+      method: 'POST',
+      body: JSON.stringify({ user: nickname, message: 'Joined chat!', token: JSON.stringify(subscription) }),
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
-  // 🔔 FCM Notifications Setup
-  async function initNotifications() {
-    if (!("Notification" in window)) return;
-
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        console.warn("Notifications not granted");
-        return;
-      }
-
-      // Replace with your actual VAPID key from Firebase Console
-      const vapidKey = "BAhd__iDU8kvxQ65a7ebCZCL8HpB9B07W4BkythVrR__ZweCuef7db6mzErw-3hPk7VhSG_LJHocyAbtDXZuAHI";
-
-      const token = await getToken(messaging, { vapidKey });
-      console.log("FCM Token:", token);
-
-      // Foreground messages
-      onMessage(messaging, (payload) => {
-        const { user, message } = payload.data || {};
-        if (user && message) {
-          new Notification(user, { body: message });
-        }
-      });
-    } catch (err) {
-      console.error("Notification setup failed:", err);
-    }
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4)
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/')
+    const rawData = atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
+    return outputArray
   }
 
   initNotifications();
 
   if (!nickname) showOverlay();
-  else { hideOverlay(); setConnectedAsText(); initChat(); }
+  else { hideOverlay(); setConnectedAsText(); }
 });
