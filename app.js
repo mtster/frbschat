@@ -127,37 +127,44 @@ document.addEventListener('DOMContentLoaded', () => {
   // -----------------------
   // Service Worker + Web Push
   // -----------------------
-  async function initNotifications() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // inside app.js — replace the initNotifications() function
+async function initNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
+  try {
+    // register service worker (you already do this elsewhere)
     const registration = await navigator.serviceWorker.register('/service-worker.js');
+
+    // replace <YOUR_VAPID_PUBLIC_KEY> with the public key you'll generate (base64url)
+    const VAPID_PUBLIC = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array('<YOUR_VAPID_PUBLIC_KEY>')
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC)
     });
 
+    // store locally
     localStorage.setItem('pushSubscription', JSON.stringify(subscription));
 
-    // Optional: send join notification
+    // send subscription to Cloudflare Worker to register in KV
+    await fetch('/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription, user: nickname || 'unknown' })
+    });
+
+    // optional: notify your backend (Firebase) that user joined
     await fetch(MESSAGES_API, {
       method: 'POST',
-      body: JSON.stringify({ user: nickname, message: 'Joined chat!', token: JSON.stringify(subscription) }),
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: nickname, message: 'Joined chat!' })
     });
+
+    showToast('Notifications enabled.');
+  } catch (err) {
+    console.error('Notification init failed', err);
+    showToast('Notifications unavailable.');
   }
+}
 
-  function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4)
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/')
-    const rawData = atob(base64)
-    const outputArray = new Uint8Array(rawData.length)
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
-    return outputArray
-  }
-
-  initNotifications();
-
-  if (!nickname) showOverlay();
-  else { hideOverlay(); setConnectedAsText(); }
 });
