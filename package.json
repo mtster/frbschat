@@ -1,5 +1,5 @@
 {
-  "name": "protocol-pages",
+  "name": "frbschat",
   "private": true,
   "type": "module",
   "dependencies": {
