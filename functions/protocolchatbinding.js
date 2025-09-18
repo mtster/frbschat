@@ -1,17 +1,4 @@
-// protocolchatbinding.js - Cloudflare Worker to broadcast push notifications to subscriptions in KV
-// This worker sends an empty WebPush to each subscription (no encrypted payload).
-// It builds a VAPID JWT signed with the VAPID private key stored in env.VAPID_PRIVATE_KEY.
-//
-// Required Wrangler environment variables / bindings:
-// - SUBSCRIPTIONS (KV Namespace binding)
-// - VAPID_PUBLIC_KEY (base64url, uncompressed public key, 65 or 64 bytes)
-// - VAPID_PRIVATE_KEY (base64url, 32 bytes)
-// - VAPID_SUBJECT (mailto: or https: contact string for VAPID 'sub' claim)
-//
-// NOTE: For iOS 16.4+ PWAs, push notifications only work when the user has added the PWA to the home
-// screen and the service worker is registered with scope that covers the site. The client should
-// subscribe with the same VAPID public key returned from the /subscribe endpoint.
-
+// protocolchatbinding.js - broadcast empty WebPush notifications to KV subscriptions (SUBSCRIBERS)
 function base64UrlToUint8Array(base64UrlString) {
   base64UrlString = base64UrlString.replace(/-/g, '+').replace(/_/g, '/');
   const pad = base64UrlString.length % 4;
@@ -92,9 +79,9 @@ export async function onRequest(context) {
 
   let body;
   try {
-    body = await request.json();
+    body = await request.json().catch(()=> ({}));
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type':'application/json' } });
+    body = {};
   }
 
   const vapidPublic = env.VAPID_PUBLIC_KEY;
@@ -104,7 +91,8 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: 'VAPID keys not configured in worker environment' }), { status: 500, headers: { 'Content-Type':'application/json' } });
   }
 
-  const listIter = await env.SUBSCRIPTIONS.list({ cursor: undefined, limit: 1000 });
+  // Use your KV binding name SUBSCRIBERS (per your setup)
+  const listIter = await env.SUBSCRIBERS.list({ cursor: undefined, limit: 1000 });
   const keys = listIter.keys || [];
   let privateKey;
   try {
@@ -115,7 +103,7 @@ export async function onRequest(context) {
 
   async function buildVapidJWT(audience) {
     const header = { alg: 'ES256', typ: 'JWT' };
-    const exp = Math.floor(Date.now() / 1000) + 12 * 60 * 60; // 12 hours
+    const exp = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
     const payload = { aud: audience, exp: exp, sub: vapidSubject };
     const encHeader = uint8ArrayToBase64Url(new TextEncoder().encode(JSON.stringify(header)));
     const encPayload = uint8ArrayToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
@@ -129,7 +117,7 @@ export async function onRequest(context) {
   const results = [];
   for (const k of keys) {
     try {
-      const rec = await env.SUBSCRIPTIONS.get(k.name);
+      const rec = await env.SUBSCRIBERS.get(k.name);
       if (!rec) continue;
       const parsed = JSON.parse(rec);
       const subscription = parsed.subscription;
