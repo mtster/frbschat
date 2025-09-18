@@ -1,34 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta charset="utf-8" />
+  <!-- important for iOS full-bleed / safe-area -->
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Protocol Chat" />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/style.css" />
+
   <title>Protocol Chat</title>
+
+  <!-- link the CSS (replace content of style.css accordingly) -->
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="app">
-    <!-- Header -->
-    <header class="app-header">
+  <!-- App root -->
+  <div id="app" class="app-root">
+    <!-- Header - uses safe area so it won't be under the iOS status bar -->
+    <header class="header">
       <div class="header-left">
-        <img src="/logo-192.png" alt="Protocol" class="header-logo" />
-        <span class="header-title">Protocol Chat</span>
+        <img src="/logo-192.png" alt="Protocol logo" class="header-logo" />
+        <div class="header-title-wrap">
+          <div class="header-title">Protocol</div>
+          <div class="header-sub">Chat</div>
+        </div>
       </div>
-      <button id="enableNotifications" class="notify-btn">Enable Notifications</button>
+
+      <div class="header-right">
+        <button id="enableNotifs" class="btn btn-notify" aria-label="Enable notifications">🔔 Enable</button>
+      </div>
     </header>
 
-    <!-- Chat messages -->
-    <main id="messages" class="chat-area"></main>
+    <!-- Messages area -->
+    <main id="messages" class="messages" role="log" aria-live="polite"></main>
 
-    <!-- Input area -->
-    <footer class="chat-input-bar">
-      <input id="messageInput" type="text" placeholder="Type a message..." />
-      <button id="sendButton">Send</button>
+    <!-- Composer/footer (full width) -->
+    <footer class="composer">
+      <div class="composer-inner">
+        <input id="messageInput" class="composer-input" type="text" inputmode="text" maxlength="1000" placeholder="Message" />
+        <button id="sendBtn" class="btn btn-send">Send</button>
+      </div>
     </footer>
   </div>
 
-  <script type="module" src="/firebase-config.js"></script>
+  <!-- app scripts -->
   <script type="module" src="/app.js"></script>
 </body>
 </html>
