@@ -1,5 +1,5 @@
-// app.js - Protocol Chat (Cloudflare + Web Push + Firebase RTDB)
-// Replace VAPID_PUBLIC_KEY value with your own public key if different.
+// app.js - UI-focused Protocol Chat client
+// Keep the VAPID_PUBLIC_KEY matched to your worker keys
 import { db } from './firebase-config.js';
 import {
   ref as dbRef,
@@ -10,102 +10,79 @@ import {
   onChildAdded
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
-const FIREBASE_DB_URL = 'https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app';
+// API endpoints (relative; keep as-is if your functions are deployed on same domain)
 const BASE_URL = '/';
-const MESSAGES_API = BASE_URL + 'protocolchatbinding';
 const SUBSCRIBE_API = BASE_URL + 'subscribe';
+const MESSAGES_API = BASE_URL + 'protocolchatbinding';
 
-// Public VAPID key (URL-safe base64). This can be public and must match the server's key.
+// Replace this value only if your worker uses a different public key
 const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
-// ---- Utilities ----
+// ---------- small helper UI (no permanent debug) ----------
+function showToast(text, ms = 3000) {
+  const wrap = document.getElementById('toastWrap');
+  if (!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = text;
+  wrap.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 220ms';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 240);
+  }, ms);
+}
+
+// Convert VAPID key for pushManager.subscribe
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
+  const out = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
+  return out;
 }
 
 function isPWAStandalone() {
   return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 }
 
-// Simple toast + debug area (visual debug for iPhone)
-function showToast(text, ms = 4000) {
-  const toastRoot = document.getElementById('toast');
-  if (!toastRoot) return;
-  const el = document.createElement('div');
-  el.className = 'm-2 p-2 rounded text-sm bg-gray-900 text-white';
-  el.style.opacity = '0.95';
-  el.textContent = text;
-  toastRoot.appendChild(el);
-  setTimeout(() => el.remove(), ms);
-  appendDebug('TOAST: ' + text);
-}
-
-function appendDebug(text) {
-  const dbg = document.getElementById('debugLog');
-  if (!dbg) return;
-  const line = document.createElement('div');
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-  line.style.fontSize = '12px';
-  line.style.padding = '2px 0';
-  dbg.prepend(line);
-}
-
-// ---- Service worker registration and messaging ----
+// ---------- Service worker registration ----------
 async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) {
-    appendDebug('Service worker not supported in this browser.');
-    return null;
-  }
+  if (!('serviceWorker' in navigator)) return null;
   try {
     const reg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
-    appendDebug('Service worker registered: scope=' + reg.scope);
-    // Listen for messages from the service worker
-    navigator.serviceWorker.addEventListener('message', (ev) => {
-      appendDebug('SW -> ' + (ev.data && ev.data.type ? ev.data.type + ': ' + JSON.stringify(ev.data) : JSON.stringify(ev.data)));
-      if (ev.data && ev.data.type === 'push-received') {
-        // show a short toast (visual debug)
-        showToast('Push received: ' + (ev.data.payload?.message || ev.data.payload?.data || '...'), 5000);
-      }
-    });
     return reg;
   } catch (err) {
-    appendDebug('Service worker registration failed: ' + err);
-    showToast('Service worker registration failed');
+    // silently fail but inform user
+    showToast('Service Worker registration failed');
     return null;
   }
 }
 
-// ---- Push subscription flow ----
+// ---------- Push subscription flow ----------
 async function subscribeToPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     showToast('Push not supported in this browser');
-    appendDebug('PushManager or ServiceWorker missing');
     return;
   }
 
   const reg = await registerServiceWorker();
-  if (!reg) return;
+  if (!reg) { showToast('Install as Home Screen app to enable notifications'); return; }
 
   try {
-    // If already subscribed locally, re-send to server
+    // If already subscribed, re-send to server
     const existing = await reg.pushManager.getSubscription();
     if (existing) {
-      appendDebug('Already have subscription, sending to server (re-register).');
       await sendSubscriptionToServer(existing);
       showToast('Notifications already enabled');
       return;
     }
 
-    // Request permission (must be user-initiated on iOS)
+    // Must request permission first
     const permission = await Notification.requestPermission();
-    appendDebug('Notification.requestPermission -> ' + permission);
     if (permission !== 'granted') {
-      showToast('Notifications permission not granted');
+      showToast('Notifications permission denied');
       return;
     }
 
@@ -113,58 +90,97 @@ async function subscribeToPush() {
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     });
-    appendDebug('Got subscription: ' + JSON.stringify(sub));
+
     await sendSubscriptionToServer(sub);
     localStorage.setItem('pushSubscription', JSON.stringify(sub));
-    showToast('Notifications enabled (subscription saved)');
+    showToast('Notifications enabled');
   } catch (err) {
-    appendDebug('subscribeToPush error: ' + err);
-    showToast('Subscription failed: ' + (err && err.message ? err.message : err));
+    showToast('Subscription failed');
   }
 }
 
 async function sendSubscriptionToServer(subscription) {
   try {
-    const resp = await fetch(SUBSCRIBE_API, {
+    await fetch(SUBSCRIBE_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription, user: (nickname || 'unknown') })
     });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      appendDebug('subscribe endpoint returned error: ' + resp.status + ' - ' + txt);
-      showToast('Server subscribe error');
-    } else {
-      appendDebug('Subscription saved on server');
-    }
   } catch (err) {
-    appendDebug('Failed to send subscription to server: ' + err);
-    showToast('Failed to reach subscribe endpoint');
+    showToast('Failed to register subscription with server');
   }
 }
 
-// ---- Firebase: listen & send messages ----
+// ---------- Firebase messaging ---------
 let messages = [];
 let nickname = localStorage.getItem('protocol_nickname') || '';
+
+function formatTime(ts) {
+  try {
+    const d = new Date(Number(ts) || Date.now());
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '';
+  }
+}
+
+function makeAvatarInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0,2).toUpperCase();
+}
 
 function renderMessages(container = document.getElementById('messages')) {
   if (!container) return;
   container.innerHTML = '';
+
   for (const m of messages) {
-    const el = document.createElement('div');
-    el.className = 'mb-2';
-    const who = document.createElement('div');
-    who.className = 'text-xs opacity-80';
-    who.textContent = m.user + ' • ' + new Date(m.ts).toLocaleTimeString();
-    const txt = document.createElement('div');
-    txt.className = 'text-base';
-    txt.textContent = m.message;
-    el.appendChild(who);
-    el.appendChild(txt);
-    container.appendChild(el);
+    const isMe = (m.user || '').trim() === (nickname || '').trim();
+
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + (isMe ? 'me' : 'other');
+
+    // For other messages: avatar + bubble; for me: bubble aligned right
+    if (!isMe) {
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'avatar';
+      avatarWrap.textContent = makeAvatarInitials(m.user || 'U');
+      row.appendChild(avatarWrap);
+    }
+
+    const content = document.createElement('div');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = m.message || '';
+
+    // If other user, show name above bubble
+    if (!isMe) {
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = m.user || 'Unknown';
+      content.appendChild(name);
+    }
+
+    content.appendChild(bubble);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = formatTime(m.ts);
+    content.appendChild(meta);
+
+    row.appendChild(content);
+    container.appendChild(row);
   }
-  // keep scrolled to bottom
-  container.scrollTop = container.scrollHeight;
+
+  // scroll to bottom
+  setTimeout(() => {
+    try {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    } catch (e) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, 60);
 }
 
 function setupFirebaseListener() {
@@ -173,123 +189,116 @@ function setupFirebaseListener() {
     const q = dbQuery(messagesRef, limitToLast(200));
     onChildAdded(q, (snap) => {
       const val = snap.val();
+      if (!val) return;
       messages.push(val);
+      // keep only last 400 in-memory as a safeguard
+      if (messages.length > 400) messages = messages.slice(-400);
       renderMessages();
     });
-    appendDebug('Firebase listener initialized');
   } catch (err) {
-    appendDebug('Firebase listener error: ' + err);
+    showToast('Database listener error');
   }
 }
 
 async function sendMessage(text) {
   if (!text || !text.trim()) return;
   const msg = { user: nickname || 'anonymous', message: text.trim(), ts: Date.now() };
+
   // optimistic UI
   messages.push(msg);
   renderMessages();
+
   try {
     const ref = dbRef(db, 'protocol-messages');
     const newRef = await dbPush(ref);
     await dbSet(newRef, msg);
   } catch (err) {
-    appendDebug('Firebase write failed: ' + err);
-    showToast('Failed to send message (DB write failed)');
+    showToast('Message failed to send');
+    return;
   }
 
-  // trigger server worker to broadcast notifications
+  // notify backend worker to broadcast push notifications
   try {
     await fetch(MESSAGES_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg)
     });
-    appendDebug('Sent message to MESSAGES_API');
   } catch (err) {
-    appendDebug('Failed to POST to MESSAGES_API: ' + err);
+    // fail silently (server may be unreachable); no UI debug
   }
 }
 
-// ---- UI wiring ----
+// ---------- UI wiring ----------
 document.addEventListener('DOMContentLoaded', async () => {
-  // Query DOM
   const nicknameOverlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
   const nicknameSave = document.getElementById('nicknameSave');
-  const connectedAs = document.getElementById('connectedAs');
   const sendForm = document.getElementById('sendForm');
   const messageInput = document.getElementById('messageInput');
   const enableNotifBtn = document.getElementById('enableNotifs');
 
-  // debug copy button
-  const copyBtn = document.getElementById('copyDebug');
-  if (copyBtn) {
-    copyBtn.onclick = () => {
-      const dbg = document.getElementById('debugLog');
-      const text = Array.from(dbg.children).map(n => n.textContent).join('\n');
-      navigator.clipboard?.writeText(text).then(() => showToast('Debug copied to clipboard'));
-    };
+  // Auto-resize textarea
+  function autoResize(el) {
+    el.style.height = 'auto';
+    const max = 160;
+    el.style.height = Math.min(el.scrollHeight, max) + 'px';
   }
+  messageInput.addEventListener('input', () => autoResize(messageInput));
 
-  function setConnectedText() {
-    if (!connectedAs) return;
-    connectedAs.textContent = 'Connected as: ' + (nickname || 'anonymous');
-  }
-
+  // Save nickname handler
   nicknameSave.addEventListener('click', () => {
-    nickname = (nicknameInput.value || '').trim();
-    if (!nickname) { showToast('Please enter a nickname'); return; }
+    const val = (nicknameInput.value || '').trim();
+    if (!val) { showToast('Please enter a name'); return; }
+    nickname = val;
     localStorage.setItem('protocol_nickname', nickname);
     nicknameOverlay.style.display = 'none';
-    setConnectedText();
-    appendDebug('Nickname saved: ' + nickname);
-    // only register SW & prompt for notifications when we have a nickname & PWA standalone
-    if (isPWAStandalone()) {
-      showToast('Running as PWA - ready to enable notifications if you added to Home Screen.');
-    }
+    showToast('Hello, ' + nickname);
   });
 
+  // Use overlay on first run if no nickname
+  if (!nickname) {
+    nicknameOverlay.style.display = 'flex';
+    nicknameInput.focus();
+  } else {
+    nicknameOverlay.style.display = 'none';
+  }
+
+  // Send form
   sendForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const text = messageInput.value;
+    const text = messageInput.value || '';
     messageInput.value = '';
+    autoResize(messageInput);
     sendMessage(text);
   });
 
-  enableNotifBtn.addEventListener('click', () => {
-    subscribeToPush();
+  // "Enable" button
+  enableNotifBtn.addEventListener('click', async () => {
+    // if not in PWA mode on iOS, request user to add to Home Screen
+    if (!isPWAStandalone()) {
+      showToast('Add to Home Screen, then open from the Home Screen and tap Enable');
+      // still attempt to register service worker so browsers that allow it will show permission
+      await registerServiceWorker();
+      return;
+    }
+    await subscribeToPush();
   });
 
-  // show overlay if no nickname
-  if (!nickname) {
-    nicknameOverlay.style.display = 'block';
-  } else {
-    nicknameOverlay.style.display = 'none';
-    setConnectedText();
-  }
-
-  // register service worker early for PWA cases
+  // Register SW early (does no UI debug)
   await registerServiceWorker();
 
-  // If already a subscription saved in localStorage, try re-sending to server (helps iOS)
+  // If subscription is saved locally, try resending to server (helps iOS)
   try {
     const saved = localStorage.getItem('pushSubscription');
     if (saved) {
-      appendDebug('Found saved pushSubscription in localStorage, attempting to re-register with server');
       const sub = JSON.parse(saved);
       await sendSubscriptionToServer(sub);
     }
-  } catch (err) {
-    appendDebug('Error re-sending saved subscription: ' + err);
+  } catch (e) {
+    // silent
   }
 
-  // Hook firebase listener
+  // Hook firebase messages
   setupFirebaseListener();
-
-  // Visual hint: offer enable notifications button if running as standalone (iOS requirement)
-  if (isPWAStandalone()) {
-    showToast('App is running in standalone mode (Home Screen). Tap "Enable Notifications" to allow push notifications.');
-  } else {
-    appendDebug('Not running as standalone PWA. On iOS, notifications only work when the app is added to Home Screen.');
-  }
 });
