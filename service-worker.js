@@ -1,115 +1,123 @@
-// service-worker.js - Cache + Push handling
-// IMPORTANT: set FIREBASE_DB_URL to your project's Realtime Database URL (no trailing slash), e.g.:
-// const FIREBASE_DB_URL = 'https://your-project-id-default-rtdb.europe-west1.firebasedatabase.app';
-const FIREBASE_DB_URL = 'https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app'; // <-- REPLACE THIS with your actual DB URL
-
+// service-worker.js - caching + push handling for Protocol Chat
 const CACHE_NAME = 'protocol-cache-v1';
 const ASSETS = [
   '/',
   '/index.html',
   '/app.js',
   '/manifest.json',
-  '/style.css',
   '/logo-192.png',
-  '/logo-512.png'
+  '/logo-512.png',
+  '/style.css'
 ];
 
+const FIREBASE_DB_URL = 'https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app';
+
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', event => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  event.respondWith(
-    caches.match(req).then(cached => {
-      if (cached) return cached;
-      return fetch(req).then(response => {
-        // cache same-origin assets from ASSETS
-        try {
-          const url = new URL(req.url);
-          if (url.origin === location.origin && ASSETS.includes(url.pathname)) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
-          }
-        } catch (e) {}
-        return response;
-      }).catch(() => {
-        if (req.mode === 'navigate') return caches.match('/index.html');
-      });
-    })
-  );
-});
-
-// Push event - show notification. If payload is missing, fetch latest message from Firebase RTDB.
-self.addEventListener('push', function(event) {
   event.waitUntil((async () => {
-    let payload = null;
-    try {
-      if (event.data) {
-        const text = event.data.text();
-        try { payload = JSON.parse(text); } catch (e) { payload = { text }; }
-      }
-    } catch (e) {
-      payload = null;
-    }
-
-    let title = 'Protocol';
-    let body = 'New message';
-    let data = { url: '/' };
-
-    if (payload && (payload.title || payload.body || payload.user || payload.text)) {
-      title = payload.title || payload.user || title;
-      body = payload.body || payload.text || body;
-      data = payload.data || data;
-    } else {
-      // Fetch latest message from Firebase RTDB via REST API (public or with read rules)
-      try {
-        // use orderBy="$key"&limitToLast=1 to get the most recent item
-        const res = await fetch(`${FIREBASE_DB_URL}/protocol-messages.json?orderBy="$key"&limitToLast=1`);
-        if (res && res.ok) {
-          const json = await res.json();
-          if (json) {
-            let last = null;
-            for (const k in json) { last = json[k]; break; }
-            if (last) {
-              title = last.user || title;
-              // try different possible message field names
-              body = last.message || last.text || last.textContent || body;
-              data = { url: '/' };
-            }
-          }
-        } else {
-          // try alternative URL pattern (some RTDB instances use different host)
-        }
-      } catch (e) {
-        // ignore fetch errors
-      }
-    }
-
-    const opts = {
-      body: body,
-      tag: 'protocol-chat',
-      renotify: true,
-      data: data,
-      badge: '/logo-192.png',
-      icon: '/logo-192.png'
-    };
-    return self.registration.showNotification(title, opts);
+    await clients.claim();
+    // cleanup old caches (if any)
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
   })());
 });
 
-self.addEventListener('notificationclick', function(event) {
+// Basic cache-first fetch handler for assets
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  // only handle GET requests
+  if (event.request.method !== 'GET') return;
+  // For navigation requests, try network first then cache fallback
+  if (event.request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(event.request);
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(event.request, response.clone());
+        return response;
+      } catch (err) {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match('/index.html');
+        return cached || new Response('Offline', { status: 503, statusText: 'Offline' });
+      }
+    })());
+    return;
+  }
+
+  // For other requests, use cache-first
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
+});
+
+// Helper to send message to all clients (visual debug)
+async function broadcastMessage(obj) {
+  const all = await clients.matchAll({ includeUncontrolled: true, type: 'window' });
+  for (const client of all) {
+    client.postMessage(obj);
+  }
+}
+
+// Push event handler
+self.addEventListener('push', event => {
+  event.waitUntil((async () => {
+    let payload = null;
+    try {
+      if (event.data && event.data.size) {
+        payload = event.data.json();
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    // If no payload was sent with the push, fetch the latest message from Firebase REST API
+    if (!payload) {
+      try {
+        const resp = await fetch(FIREBASE_DB_URL + '/protocol-messages.json?orderBy="$key"&limitToLast=1');
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json) {
+            // Firebase returns an object keyed by push id
+            const keys = Object.keys(json);
+            if (keys.length) {
+              const last = json[keys[0]];
+              payload = { user: last.user, message: last.message || last.text || '' };
+            }
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    const title = (payload && (payload.user || payload.title)) ? (payload.user || payload.title) : 'Protocol Chat';
+    const body = (payload && (payload.message || payload.data)) ? (payload.message || payload.data) : 'New message';
+    const options = {
+      body,
+      icon: '/logo-192.png',
+      badge: '/logo-192.png',
+      tag: 'protocol-chat',
+      renotify: true,
+      data: { payload }
+    };
+
+    await broadcastMessage({ type: 'push-received', payload });
+    return self.registration.showNotification(title, options);
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil((async () => {
-    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of allClients) {
-      if (c.url === '/' && 'focus' in c) return c.focus();
+    const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of all) {
+      try {
+        if ('focus' in client) return client.focus();
+      } catch (e) {}
     }
     if (clients.openWindow) return clients.openWindow('/');
   })());
