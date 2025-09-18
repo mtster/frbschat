@@ -1,4 +1,4 @@
-// subscribe.js - Cloudflare Worker to store subscriptions and return VAPID public key
+// subscribe.js - Cloudflare Pages Function to store subscriptions and return VAPID public key
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -28,7 +28,8 @@ export async function onRequest(context) {
       const user = body.user || null;
       const id = 'sub_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
       const record = { subscription, user, createdAt: new Date().toISOString() };
-      await env.SUBSCRIPTIONS.put(id, JSON.stringify(record));
+      // Note: using the SUBSCRIBERS binding name (per your setup)
+      await env.SUBSCRIBERS.put(id, JSON.stringify(record));
       return new Response(JSON.stringify({ ok: true, id }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
