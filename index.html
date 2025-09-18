@@ -9,61 +9,70 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="Protocol"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="apple-touch-icon" href="logo-192.png">
 
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    body { background:#000; color:#fff; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
-    .bubble { max-width:78%; word-break:break-word; white-space:pre-wrap; }
-    .muted { color:rgba(255,255,255,0.55); font-size:0.78rem; }
-    #nicknameOverlay { transition: opacity .18s ease; }
-    #toastRoot { position: fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:60; }
+    html,body,#app { height: 100%; }
+    #messages { max-height: calc(100vh - 220px); overflow-y: auto; padding: 1rem; }
+    #toast { position: fixed; right: 12px; top: 12px; z-index: 9999; }
+    #nicknameOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 9998; }
+    #debugPanel { position: fixed; left: 12px; bottom: 12px; width: calc(100% - 24px); max-height: 200px; overflow: auto; background: rgba(0,0,0,0.7); color: #fff; padding: 8px; border-radius: 8px; font-family: monospace; font-size: 12px; z-index: 9997; }
   </style>
 </head>
-<body class="h-full flex flex-col">
+<body class="bg-black text-white">
+  <div id="app" class="flex flex-col h-full">
+    <header class="p-4 border-b border-zinc-800 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="logo-192.png" width="40" height="40" alt="Protocol logo" />
+        <div>
+          <div class="text-lg font-semibold">Protocol Chat</div>
+          <div id="connectedAs" class="text-xs opacity-75">Not connected</div>
+        </div>
+      </div>
+      <div>
+        <button id="enableNotifs" class="px-3 py-1 bg-emerald-600 text-black rounded">Enable Notifications</button>
+      </div>
+    </header>
 
-  <!-- Nickname overlay -->
-  <div id="nicknameOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
-    <div class="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-6 rounded-lg shadow-lg">
-      <h1 class="text-2xl font-semibold mb-2">Welcome to Protocol</h1>
-      <p class="text-sm text-zinc-400 mb-4">Enter a nickname (one-time). Keep it short.</p>
-      <input id="nicknameInput" maxlength="24" placeholder="Your nickname" class="w-full p-3 rounded bg-[#0b0b0b] border border-zinc-700 placeholder-zinc-500 mb-3 focus:outline-none" />
-      <button id="nicknameSave" type="button" class="w-full py-2 rounded bg-green-600 hover:bg-green-500 text-black font-semibold">Start Chatting</button>
-      <p id="demoHint" class="text-xs text-zinc-500 mt-3">If you haven't set the backend URL yet, the app will run in local demo mode.</p>
+    <main class="flex-1 overflow-hidden">
+      <div id="messages" class="p-4"></div>
+    </main>
+
+    <footer class="p-3 border-t border-zinc-800">
+      <form id="sendForm" class="flex gap-2">
+        <textarea id="messageInput" rows="1" placeholder="Type a message..." class="flex-1 bg-zinc-900 rounded p-2 text-white"></textarea>
+        <button id="sendBtn" type="submit" class="px-4 py-2 bg-green-600 text-black rounded">Send</button>
+      </form>
+    </footer>
+  </div>
+
+  <!-- nickname overlay -->
+  <div id="nicknameOverlay" style="display:none;">
+    <div style="background:#0b0b0b;padding:16px;border-radius:8px;max-width:90%;width:400px;">
+      <h3 style="margin:0 0 8px 0;">Enter a nickname</h3>
+      <input id="nicknameInput" placeholder="Your nickname" style="width:100%;padding:8px;margin-bottom:8px;border-radius:6px;border:1px solid #333;background:#111;color:#fff;" />
+      <div style="text-align:right;">
+        <button id="nicknameSave" style="padding:8px 12px;background:#16a34a;color:#000;border-radius:6px;">Save</button>
+      </div>
     </div>
   </div>
 
-  <!-- Header -->
-  <header class="p-4 border-b border-zinc-900 bg-black/60 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-sm font-bold text-green-300">P</div>
-      <div>
-        <div class="text-sm font-semibold">Protocol</div>
-        <div id="connectedAs" class="muted">Not signed in</div>
-      </div>
+  <!-- toast -->
+  <div id="toast" class="pointer-events-none"></div>
+
+  <!-- debug panel -->
+  <div id="debugPanel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="font-weight:600;">Debug (tap Copy)</div>
+      <button id="copyDebug" style="background:#111;color:#fff;padding:4px 6px;border-radius:4px;">Copy</button>
     </div>
-    <div class="text-xs muted">4 users max • PWA demo</div>
-  </header>
-
-  <!-- Messages -->
-  <main id="messagesContainer" class="flex-1 overflow-auto p-4">
-    <div id="chatList" class="flex flex-col gap-3"></div>
-  </main>
-
-  <!-- Composer -->
-  <footer class="p-3 border-t border-zinc-900 bg-black/60">
-    <form id="msgForm" class="flex gap-3 items-end">
-      <textarea id="msgInput" rows="1" placeholder="Type a message..." class="flex-1 resize-none p-3 rounded-lg bg-[#0b0b0b] border border-zinc-800 focus:outline-none"></textarea>
-      <button id="sendBtn" type="submit" class="py-2 px-4 rounded-lg bg-green-600 hover:bg-green-500 text-black font-semibold">Send</button>
-    </form>
-  </footer>
-
-  <!-- Toast Root -->
-  <div id="toastRoot" class="pointer-events-none"></div>
+    <div id="debugLog" style="max-height:140px;overflow:auto;"></div>
+  </div>
 
   <!-- Firebase + App scripts using modules -->
   <script type="module" src="app.js"></script>
-
 </body>
 </html>
