@@ -1,3 +1,14 @@
+// app.js - Protocol Chat (Cloudflare + Web Push + Firebase RTDB)
+import { db } from './firebase-config.js';
+import {
+  ref as dbRef,
+  push as dbPush,
+  set as dbSet,
+  query as dbQuery,
+  limitToLast,
+  onChildAdded
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
@@ -62,7 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30);
   }
 
-  // Firebase Realtime Database listener
+  // --------------------------------
+  // Firebase Realtime Database listen
+  // --------------------------------
   try {
     const listRef = dbQuery(dbRef(db, 'protocol-messages'), limitToLast(200));
     onChildAdded(listRef, (snap) => {
@@ -75,7 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Realtime DB listener not initialized', e);
   }
 
+  // -----------------------
   // Send message -> write to Firebase + POST to Worker trigger
+  // -----------------------
   async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -106,6 +121,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // -----------------------
+  // User nickname setup
+  // -----------------------
   nicknameSave.addEventListener('click', () => {
     const val = nicknameInput.value.trim();
     if (!val) { showToast('Enter a nickname.'); return; }
@@ -114,6 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
     hideOverlay();
     setConnectedAsText();
     showToast('Welcome, ' + nickname + '!');
+
+    // trigger notification setup only after user sets nickname
+    if (isPWAStandalone()) promptEnableNotifications();
   });
 
   nicknameInput.addEventListener('keydown', e => {
@@ -135,36 +156,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Service Worker + Web Push (subscribe)
+  // -----------------------
+  // PWA Detection for iOS 16.4+ and Notifications
+  // -----------------------
+  function isPWAStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
   const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
   function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4)
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/')
-    const rawData = atob(base64)
-    const outputArray = new Uint8Array(rawData.length)
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
-    return outputArray
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
   }
 
-  // iOS PWA detection
-  function isIos() {
-    return /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-  }
-
-  function isInStandaloneMode() {
-    return ('standalone' in window.navigator) && window.navigator.standalone;
-  }
-
-  async function initNotifications() {
+  async function subscribeToPush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-    if (isIos() && !isInStandaloneMode()) {
-      console.warn('iOS Web Push requires app to be added to Home Screen.');
-      showToast('Open app from Home Screen to enable notifications.');
-      return;
-    }
-
     try {
       const registration = await navigator.serviceWorker.register('/service-worker.js');
 
@@ -180,10 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        showToast('Notifications blocked. Please enable from Settings.');
-        return;
-      }
+      if (permission !== 'granted') { showToast('Notifications blocked'); return; }
 
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -191,22 +199,34 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       localStorage.setItem('pushSubscription', JSON.stringify(subscription));
-
       await fetch(SUBSCRIBE_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription, user: nickname || 'unknown' })
       });
 
-      showToast('Notifications enabled.');
+      showToast('Notifications enabled!');
     } catch (err) {
-      console.error('Notification init failed', err);
+      console.error('Push subscription failed', err);
       showToast('Notifications unavailable.');
     }
   }
 
-  initNotifications();
+  function promptEnableNotifications() {
+    if (!isPWAStandalone()) return; // do not prompt in browser
+    const btn = document.createElement('button');
+    btn.textContent = 'Enable Notifications';
+    btn.className = 'bg-emerald-500 text-black px-4 py-2 rounded mb-2';
+    btn.onclick = () => { subscribeToPush(); btn.remove(); };
+    toastRoot.appendChild(btn);
+  }
 
+  // -----------------------
+  // Initialization
+  // -----------------------
   if (!nickname) showOverlay();
   else { hideOverlay(); setConnectedAsText(); }
+
+  // prompt notifications only if in standalone PWA
+  if (nickname && isPWAStandalone()) promptEnableNotifications();
 });
