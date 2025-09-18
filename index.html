@@ -18,6 +18,7 @@
     .bubble { max-width:78%; word-break:break-word; white-space:pre-wrap; }
     .muted { color:rgba(255,255,255,0.55); font-size:0.78rem; }
     #nicknameOverlay { transition: opacity .18s ease; }
+    #toastRoot { position: fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:60; }
   </style>
 </head>
 <body class="h-full flex flex-col">
@@ -29,6 +30,7 @@
       <p class="text-sm text-zinc-400 mb-4">Enter a nickname (one-time). Keep it short.</p>
       <input id="nicknameInput" maxlength="24" placeholder="Your nickname" class="w-full p-3 rounded bg-[#0b0b0b] border border-zinc-700 placeholder-zinc-500 mb-3 focus:outline-none" />
       <button id="nicknameSave" type="button" class="w-full py-2 rounded bg-green-600 hover:bg-green-500 text-black font-semibold">Start Chatting</button>
+      <p id="demoHint" class="text-xs text-zinc-500 mt-3">If you haven't set the backend URL yet, the app will run in local demo mode.</p>
     </div>
   </div>
 
