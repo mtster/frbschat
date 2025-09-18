@@ -1,7 +1,7 @@
 // service-worker.js - Cache + Push handling
 // IMPORTANT: set FIREBASE_DB_URL to your project's Realtime Database URL (no trailing slash), e.g.:
 // const FIREBASE_DB_URL = 'https://your-project-id-default-rtdb.europe-west1.firebasedatabase.app';
-const FIREBASE_DB_URL = 'https://<YOUR_FIREBASE_DB>.firebaseio.com'; // <-- REPLACE THIS with your actual DB URL
+const FIREBASE_DB_URL = 'https://protocol-chat-b6120-default-rtdb.europe-west1.firebasedatabase.app'; // <-- REPLACE THIS with your actual DB URL
 
 const CACHE_NAME = 'protocol-cache-v1';
 const ASSETS = [
