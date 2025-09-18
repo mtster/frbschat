@@ -1,129 +1,125 @@
-/* Reset + dark hacker theme */
-body, html {
-  margin: 0;
-  padding: 0;
-  font-family: "Inter", sans-serif;
-  background: #0d0d0d;
-  color: #eee;
-  height: 100%;
+/* style.css - Elegant dark chat, safe-area aware */
+
+/* --- root / variables --- */
+:root{
+  --bg:#06090b;
+  --panel:#07131a;
+  --muted:#9fb4bf;
+  --accent:#10b981;
+  --accent-2:#06b6d4;
+  --glass: rgba(255,255,255,0.03);
+  --bubble-radius:18px;
+  --max-width:960px;
 }
 
-/* App container */
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:#e6eef3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
+.app-root{display:flex;flex-direction:column;height:100vh;}
 
-/* Header */
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #111;
-  padding: 10px 16px;
-  border-bottom: 1px solid #222;
+/* Ensure content not hidden under iOS status bar */
+.header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: calc(env(safe-area-inset-top) + 10px) 14px 10px 14px; /* top includes safe-area */
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  border-bottom: 1px solid rgba(255,255,255,0.02);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 50;
+  backdrop-filter: blur(6px);
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
+/* left area: logo + title */
+.header-left { display:flex; gap:10px; align-items:center; }
+.header-logo { width:40px; height:40px; border-radius:10px; object-fit:cover; box-shadow: 0 8px 20px rgba(2,6,12,0.6); }
+.header-title-wrap { line-height:1; }
+.header-title { font-size:16px; font-weight:700; color:#fff; }
+.header-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+
+/* right area: enable button */
+.header-right { display:flex; align-items:center; gap:8px; }
+.btn { border: none; cursor: pointer; padding:8px 12px; border-radius:10px; font-weight:700; }
+.btn-notify { background: linear-gradient(135deg,var(--accent),#34d399); color:#021916; box-shadow: 0 8px 24px rgba(3,9,13,0.65); }
+.btn-send { background: linear-gradient(135deg,#0ea5a5,var(--accent-2)); color:#001216; padding:10px 14px; border-radius:12px; font-weight:800; }
+
+/* Messages area - center content and constrain width for large screens */
+.messages {
+  flex:1;
+  overflow-y:auto;
+  padding:14px 12px 18px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:center; /* center the message column on wide screens */
 }
 
-.header-logo {
-  width: 28px;
-  height: 28px;
-  margin-right: 8px;
+/* Inner message column container (keeps center width) */
+.messages > .msg-col {
+  width:100%;
+  max-width:var(--max-width);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
 
-.header-title {
-  font-size: 1.1rem;
-  font-weight: bold;
-  color: #0f9d58;
+/* message row */
+.msg {
+  max-width:78%;
+  padding:10px 14px;
+  border-radius: var(--bubble-radius);
+  line-height:1.35;
+  word-wrap:break-word;
+  white-space:pre-wrap; /* preserve normal spacing */
+  box-shadow: 0 12px 30px rgba(2,6,12,0.6);
+  font-size:15px;
 }
 
-.notify-btn {
-  background: #0f9d58;
-  border: none;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
+/* incoming (other) */
+.msg.other { align-self:flex-start; background: linear-gradient(180deg,#0c1416,#071014); border:1px solid rgba(255,255,255,0.03); color:#e6eef3; border-bottom-left-radius:6px; }
+/* name above bubble */
+.msg.other .name { font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:700; }
+
+/* my messages */
+.msg.me { align-self:flex-end; background: linear-gradient(135deg,#34d399,#10b981); color:#022018; border-bottom-right-radius:6px; }
+
+/* meta (timestamp) */
+.meta { font-size:11px; opacity:0.65; margin-top:8px; }
+
+/* Composer / input bar */
+.composer {
+  border-top:1px solid rgba(255,255,255,0.02);
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.35));
+  padding: calc(env(safe-area-inset-bottom) + 10px) 12px 12px 12px; /* bottom safe area */
+  position: sticky;
+  bottom: 0;
+  z-index:40;
 }
 
-/* Chat area */
-.chat-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.composer-inner {
+  display:flex;
+  gap:10px;
+  max-width:var(--max-width);
+  margin:0 auto;
+  align-items:center;
 }
 
-/* Message bubbles */
-.message {
-  max-width: 75%;
-  padding: 8px 12px;
-  border-radius: 14px;
-  line-height: 1.4;
-  word-wrap: break-word;
-  white-space: pre-wrap;
+.composer-input {
+  flex:1;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.02);
+  color:#e6eef3;
+  outline:none;
+  font-size:15px;
 }
 
-.message.self {
-  align-self: flex-end;
-  background: #0f9d58;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.message.other {
-  align-self: flex-start;
-  background: #222;
-  color: #ddd;
-  border-bottom-left-radius: 4px;
-}
-
-.nickname {
-  font-size: 0.75rem;
-  opacity: 0.7;
-  margin-bottom: 2px;
-}
-
-/* Input bar */
-.chat-input-bar {
-  display: flex;
-  align-items: center;
-  background: #111;
-  padding: 8px;
-  border-top: 1px solid #222;
-  gap: 6px;
-}
-
-.chat-input-bar input {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  outline: none;
-  font-size: 1rem;
-  background: #222;
-  color: #fff;
-}
-
-.chat-input-bar button {
-  padding: 10px 14px;
-  border: none;
-  border-radius: 8px;
-  background: #0f9d58;
-  color: #fff;
-  cursor: pointer;
-  font-size: 1rem;
+/* small screens */
+@media (max-width:640px){
+  .header-logo { width:34px; height:34px; }
+  .header { padding: calc(env(safe-area-inset-top) + 8px) 12px 8px 12px; }
+  .messages { padding:10px; }
+  .composer-inner { padding:0 6px; }
+  .composer-input { font-size:16px; padding:12px; }
 }
