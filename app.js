@@ -3,6 +3,11 @@
 // IMPORTANT: This file intentionally preserves your RTDB & push endpoints.
 // It only changes client rendering and SW registration behavior.
 
+// ----- VAPID public key (client) -----
+// Replace this value only if your server uses a different public key.
+// The client must use the same public key pair that your Cloudflare worker uses.
+const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
+
 import { db } from './firebase-config.js';
 import {
   ref as dbRef,
@@ -163,14 +168,7 @@ async function subscribeToPush() {
       return;
     }
 
-    // NOTE: your PUBLIC VAPID key must match server's key. Keep storing public key in client or env.
-    // If you store it in app.js earlier, keep it consistent. Fallback: read from window.__VAPID_PUBLIC_KEY if set.
-    const VAPID_PUBLIC_KEY = window.__VAPID_PUBLIC_KEY || (window.VAPID_PUBLIC_KEY || null);
-    if (!VAPID_PUBLIC_KEY) {
-      // Try to register w/o appServerKey (some browsers accept); rely on server to push. But iOS needs proper VAPID.
-      showToast('VAPID public key missing');
-      return;
-    }
+    // Use the VAPID public key defined at the top of this file
     const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
     // send to server
