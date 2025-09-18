@@ -18,7 +18,6 @@
     .bubble { max-width:78%; word-break:break-word; white-space:pre-wrap; }
     .muted { color:rgba(255,255,255,0.55); font-size:0.78rem; }
     #nicknameOverlay { transition: opacity .18s ease; }
-    #toast { position: fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:60; }
   </style>
 </head>
 <body class="h-full flex flex-col">
@@ -30,7 +29,6 @@
       <p class="text-sm text-zinc-400 mb-4">Enter a nickname (one-time). Keep it short.</p>
       <input id="nicknameInput" maxlength="24" placeholder="Your nickname" class="w-full p-3 rounded bg-[#0b0b0b] border border-zinc-700 placeholder-zinc-500 mb-3 focus:outline-none" />
       <button id="nicknameSave" type="button" class="w-full py-2 rounded bg-green-600 hover:bg-green-500 text-black font-semibold">Start Chatting</button>
-      <p id="demoHint" class="text-xs text-zinc-500 mt-3">If you haven't set the backend URL yet, the app will run in local demo mode.</p>
     </div>
   </div>
 
@@ -48,22 +46,21 @@
 
   <!-- Messages -->
   <main id="messagesContainer" class="flex-1 overflow-auto p-4">
-    <div id="messagesList" class="flex flex-col gap-3"></div>
+    <div id="chatList" class="flex flex-col gap-3"></div>
   </main>
 
   <!-- Composer -->
   <footer class="p-3 border-t border-zinc-900 bg-black/60">
-    <form id="composeForm" class="flex gap-3 items-end">
-      <textarea id="messageInput" rows="1" placeholder="Type a message..." class="flex-1 resize-none p-3 rounded-lg bg-[#0b0b0b] border border-zinc-800 focus:outline-none"></textarea>
+    <form id="msgForm" class="flex gap-3 items-end">
+      <textarea id="msgInput" rows="1" placeholder="Type a message..." class="flex-1 resize-none p-3 rounded-lg bg-[#0b0b0b] border border-zinc-800 focus:outline-none"></textarea>
       <button id="sendBtn" type="submit" class="py-2 px-4 rounded-lg bg-green-600 hover:bg-green-500 text-black font-semibold">Send</button>
     </form>
   </footer>
 
-  <!-- toast -->
-  <div id="toast" class="pointer-events-none"></div>
+  <!-- Toast Root -->
+  <div id="toastRoot" class="pointer-events-none"></div>
 
   <!-- Firebase + App scripts using modules -->
-  
   <script type="module" src="app.js"></script>
 
 </body>
