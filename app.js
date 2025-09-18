@@ -1,16 +1,4 @@
-// app.js - Protocol Chat (updated push subscription flow + PWA/iOS improvements)
-//
-// Instructions:
-// - Replace SUBSCRIBE_ENDPOINT with your Cloudflare Worker (subscribe worker) URL if needed.
-//   The client will request GET /subscribe to obtain the VAPID public key, and POST /subscribe
-//   to store subscriptions in Workers KV. When deployed to the same domain as the worker,
-//   a relative path like '/subscribe' is fine. If your worker is hosted under a different domain
-//   or path, update SUBSCRIBE_ENDPOINT accordingly.
-//
-// - Make sure your Cloudflare Worker (subscribe.js) sets VAPID_PUBLIC_KEY and SUBSCRIPTIONS KV binding.
-// - Make sure service-worker.js is deployed at the site root ("/service-worker.js") and has scope "/".
-//
-// This file preserves the Firebase RTDB real-time chat behaviour and adds a robust push subscription flow.
+// app.js - Protocol Chat (PWA + Firebase + Push Notifications)
 
 import { db } from './firebase-config.js';
 import {
@@ -22,15 +10,14 @@ import {
   onChildAdded
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
-// Configuration - update if your subscribe worker is hosted elsewhere:
-const SUBSCRIBE_ENDPOINT = '/subscribe'; // <-- change if your worker is at another path or domain
-const PUSH_BROADCAST_ENDPOINT = '/protocolchatbinding'; // <-- endpoint of your protocolchatbinding worker (change as needed)
+// Endpoints (Cloudflare Pages Functions)
+const SUBSCRIBE_ENDPOINT = '/subscribe';
+const PUSH_BROADCAST_ENDPOINT = '/protocolchatbinding';
 
 // Utils
 function urlBase64ToUint8Array(base64String) {
-  // Replace URL-safe characters
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
   const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; ++i) {
@@ -43,7 +30,7 @@ function isPWAStandalone() {
   return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 }
 
-// DOM Elements (assumes your index.html has these IDs)
+// DOM Elements (must exist in index.html)
 const overlay = document.getElementById('nicknameOverlay');
 const nicknameInput = document.getElementById('nicknameInput');
 const nicknameSave = document.getElementById('nicknameSave');
@@ -57,7 +44,7 @@ const toastRoot = document.getElementById('toastRoot');
 let nickname = localStorage.getItem('protocol_nickname') || '';
 let swRegistration = null;
 
-// Service Worker registration - ensure root scope
+// Register Service Worker
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).then(reg => {
     console.log('Service Worker registered:', reg.scope);
@@ -67,7 +54,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Firebase - message sending
+// Firebase – load last 200 messages
 const messagesRef = dbRef(db, 'protocol-messages');
 const recentQuery = dbQuery(messagesRef, limitToLast(200));
 
@@ -91,21 +78,22 @@ function addMessageToUI(msg, key) {
   chatList.scrollTop = chatList.scrollHeight;
 }
 
+// Handle sending messages
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = msgInput.value.trim();
   if (!text) return;
   const entry = { user: nickname || 'anonymous', text, ts: Date.now() };
-  // optimistic UI
+
+  // Optimistic UI update
   addMessageToUI(entry);
   msgInput.value = '';
+
   try {
     const newRef = await dbPush(messagesRef);
     await dbSet(newRef, entry);
 
-    // OPTIONAL: trigger server-side worker to broadcast notifications
-    // (uncomment and set PUSH_BROADCAST_ENDPOINT to your worker path)
-    /*
+    // Trigger push broadcast
     try {
       await fetch(PUSH_BROADCAST_ENDPOINT, {
         method: 'POST',
@@ -115,16 +103,16 @@ form.addEventListener('submit', async (e) => {
     } catch (err) {
       console.warn('notify worker call failed:', err);
     }
-    */
 
   } catch (err) {
     console.error('Failed to send message:', err);
   }
 });
 
-// Nickname overlay logic
+// Nickname overlay
 function showOverlay() { overlay.style.display = 'flex'; }
 function hideOverlay() { overlay.style.display = 'none'; }
+
 nicknameSave.addEventListener('click', () => {
   const v = nicknameInput.value.trim();
   if (!v) return;
@@ -137,22 +125,22 @@ nicknameSave.addEventListener('click', () => {
 if (!nickname) showOverlay();
 else hideOverlay();
 
-// Notification subscription logic
+// Push subscription
 async function getVapidPublicKey() {
   try {
-    const res = await fetch(SUBSCRIBE_ENDPOINT, { method: 'GET' });
+    const res = await fetch(SUBSCRIBE_ENDPOINT);
     if (!res.ok) throw new Error('Failed to fetch VAPID key');
     const j = await res.json();
     return j.publicKey;
   } catch (err) {
-    console.error('Could not load VAPID public key from server:', err);
+    console.error('Could not load VAPID key:', err);
     return null;
   }
 }
 
 async function subscribeToPush() {
   if (!swRegistration) {
-    console.warn('Service worker registration not ready yet');
+    console.warn('Service worker not ready yet');
     return;
   }
   if (!('PushManager' in window)) {
@@ -167,14 +155,13 @@ async function subscribeToPush() {
     }
     const publicKey = await getVapidPublicKey();
     if (!publicKey) {
-      alert('Cannot subscribe: server VAPID key missing. Check subscribe worker.');
+      alert('Cannot subscribe: missing server VAPID key.');
       return;
     }
     const sub = await swRegistration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(publicKey)
     });
-    // Send subscription to server to save in KV
     await fetch(SUBSCRIBE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -187,7 +174,7 @@ async function subscribeToPush() {
   }
 }
 
-// Simple toast helper
+// Toast helper
 function showToast(msg, timeout=3500) {
   const el = document.createElement('div');
   el.className = 'fixed bottom-4 right-4 bg-zinc-900 text-white px-4 py-2 rounded shadow';
@@ -196,10 +183,9 @@ function showToast(msg, timeout=3500) {
   setTimeout(() => el.remove(), timeout);
 }
 
-// Only prompt for notifications if running as standalone PWA (iOS requirement)
+// Notification prompt
 function maybePromptForNotifications() {
   if (isPWAStandalone()) {
-    // show an in-app prompt to enable notifications
     const btn = document.createElement('button');
     btn.className = 'bg-emerald-500 text-black px-4 py-2 rounded mb-2';
     btn.textContent = 'Enable Notifications';
@@ -209,21 +195,19 @@ function maybePromptForNotifications() {
     });
     toastRoot.appendChild(btn);
   } else {
-    console.log('Not a standalone PWA; skipping push prompt (iOS requires home-screen PWA).');
+    console.log('Not standalone PWA; skipping push prompt.');
   }
 }
 
-// If nickname was already present, we may want to show prompt (for returning users)
-if (nickname) {
-  maybePromptForNotifications();
-}
+// Returning user prompt
+if (nickname) maybePromptForNotifications();
 
-// Wire enableNotificationsBtn (if present)
+// Manual enable button (if present in HTML)
 if (enableNotificationsBtn) {
   enableNotificationsBtn.addEventListener('click', () => {
     subscribeToPush();
   });
 }
 
-// Expose subscribe function on window for debugging
+// Debug hook
 window.__protocol_subscribeToPush = subscribeToPush;
