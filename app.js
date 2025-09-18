@@ -1,14 +1,3 @@
-// app.js - Protocol Chat (Cloudflare + Web Push + Firebase RTDB)
-import { db } from './firebase-config.js';
-import {
-  ref as dbRef,
-  push as dbPush,
-  set as dbSet,
-  query as dbQuery,
-  limitToLast,
-  onChildAdded
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
@@ -23,9 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let nickname = localStorage.getItem('protocol_nickname') || '';
   let messages = [];
 
-  const BASE_URL = '/'; // served from Cloudflare Pages root
-  const MESSAGES_API = BASE_URL + 'protocolchatbinding'; // POST -> triggers Worker push
-  const SUBSCRIBE_API = BASE_URL + 'subscribe'; // POST subscription -> Worker stores in KV
+  const BASE_URL = '/';
+  const MESSAGES_API = BASE_URL + 'protocolchatbinding';
+  const SUBSCRIBE_API = BASE_URL + 'subscribe';
 
   function showToast(text, ms = 3500) {
     toastRoot.innerHTML = '';
@@ -73,9 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30);
   }
 
-  // --------------------------------
-  // Firebase Realtime Database listen
-  // --------------------------------
+  // Firebase Realtime Database listener
   try {
     const listRef = dbQuery(dbRef(db, 'protocol-messages'), limitToLast(200));
     onChildAdded(listRef, (snap) => {
@@ -88,9 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Realtime DB listener not initialized', e);
   }
 
-  // -----------------------
   // Send message -> write to Firebase + POST to Worker trigger
-  // -----------------------
   async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -150,9 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // -----------------------
   // Service Worker + Web Push (subscribe)
-  // -----------------------
   const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
   function urlBase64ToUint8Array(base64String) {
@@ -164,9 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return outputArray
   }
 
-  // -----------------------
   // iOS PWA detection
-  // -----------------------
   function isIos() {
     return /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
   }
