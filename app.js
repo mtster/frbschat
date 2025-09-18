@@ -105,9 +105,9 @@ form.addEventListener('submit', async (e) => {
 
     // OPTIONAL: trigger server-side worker to broadcast notifications
     // (uncomment and set PUSH_BROADCAST_ENDPOINT to your worker path)
-    
+    /*
     try {
-      await fetch('/protocolchatbinding', {
+      await fetch(PUSH_BROADCAST_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: entry })
@@ -115,7 +115,7 @@ form.addEventListener('submit', async (e) => {
     } catch (err) {
       console.warn('notify worker call failed:', err);
     }
-    
+    */
 
   } catch (err) {
     console.error('Failed to send message:', err);
