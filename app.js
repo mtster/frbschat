@@ -1,4 +1,4 @@
-// app.js - Protocol Chat (Cloudflare + Web Push + Firebase RTDB)
+// app.js - Protocol Chat (iPhone-friendly PWA + Firebase + Web Push)
 import { db } from './firebase-config.js';
 import {
   ref as dbRef,
@@ -23,11 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let nickname = localStorage.getItem('protocol_nickname') || '';
   let messages = [];
 
-  const BASE_URL = '/'; // served from Cloudflare Pages root
-  const MESSAGES_API = BASE_URL + 'protocolchatbinding'; // POST -> triggers Worker push
-  const SUBSCRIBE_API = BASE_URL + 'subscribe'; // POST subscription -> Worker stores in KV
+  const BASE_URL = '/';
+  const MESSAGES_API = BASE_URL + 'protocolchatbinding';
+  const SUBSCRIBE_API = BASE_URL + 'subscribe';
 
-  function showToast(text, ms = 3500) {
+  function showToast(text, ms = 4000) {
     toastRoot.innerHTML = '';
     const el = document.createElement('div');
     el.className = 'bg-zinc-900 border border-zinc-800 text-sm text-white px-4 py-2 rounded shadow';
@@ -68,16 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
       messagesList.appendChild(wrapper);
     });
 
-    setTimeout(() => {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight + 200;
-    }, 30);
+    setTimeout(() => { messagesContainer.scrollTop = messagesContainer.scrollHeight + 200; }, 30);
   }
 
-  // --------------------------------
+  // -----------------------
   // Firebase Realtime Database listen
-  // --------------------------------
+  // -----------------------
   try {
-    // Listen to last 200 messages and append as they arrive
     const listRef = dbQuery(dbRef(db, 'protocol-messages'), limitToLast(200));
     onChildAdded(listRef, (snap) => {
       const val = snap.val();
@@ -86,23 +83,21 @@ document.addEventListener('DOMContentLoaded', () => {
       renderMessages();
     });
   } catch (e) {
-    console.warn('Realtime DB listener not initialized', e);
+    console.warn('Realtime DB listener failed', e);
+    showToast('Realtime DB not connected.');
   }
 
   // -----------------------
-  // Send message -> write to Firebase + POST to Worker trigger
+  // Send message
   // -----------------------
   async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     const msg = { user: nickname, message: trimmed, timestamp: new Date().toISOString() };
-
-    // optimistic local UI
     messages.push(msg);
     renderMessages();
 
-    // 1) write to Firebase
     try {
       const newRef = dbPush(dbRef(db, 'protocol-messages'));
       await dbSet(newRef, msg);
@@ -111,7 +106,6 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Failed to write to DB.');
     }
 
-    // 2) Tell the Worker to broadcast & send push notifications
     try {
       await fetch(MESSAGES_API, {
         method: 'POST',
@@ -121,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
       messageInput.value = '';
     } catch (err) {
       console.error('Send to Worker failed', err);
-      showToast('Network error sending message to push gateway.');
+      showToast('Network error sending message to push.');
     }
   }
 
@@ -155,38 +149,43 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // -----------------------
-  // Service Worker + Web Push (subscribe)
+  // Service Worker + Push (iPhone-friendly)
   // -----------------------
-  // EDIT THIS: replace with your VAPID public key (base64url string)
   const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
   function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4)
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/')
-    const rawData = atob(base64)
-    const outputArray = new Uint8Array(rawData.length)
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
-    return outputArray
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
   }
 
   async function initNotifications() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!('serviceWorker' in navigator)) { showToast('Service Workers unavailable.'); return; }
+    if (!('PushManager' in window)) { showToast('Push not supported on this device.'); return; }
 
     try {
       const registration = await navigator.serviceWorker.register('/service-worker.js');
+      alert('Service Worker registered ✅');
 
-      // If user already subscribed (stored locally), skip re-subscribe
+      // Existing subscription?
       const existing = localStorage.getItem('pushSubscription');
       if (existing) {
-        // still post to Worker once to ensure KV has it (safe)
         const subObj = JSON.parse(existing);
         await fetch(SUBSCRIBE_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subscription: subObj, user: nickname || 'unknown' })
         });
+        alert('Already subscribed ✅');
         return;
       }
+
+      // Request permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') { alert('Notifications blocked ❌'); return; }
 
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -195,17 +194,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       localStorage.setItem('pushSubscription', JSON.stringify(subscription));
 
-      // Send to Worker to persist into KV
       await fetch(SUBSCRIBE_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription, user: nickname || 'unknown' })
       });
 
-      showToast('Notifications enabled.');
+      alert('Notifications enabled ✅');
+
     } catch (err) {
       console.error('Notification init failed', err);
-      showToast('Notifications unavailable.');
+      alert('Notifications unavailable ❌ ' + err.message);
     }
   }
 
