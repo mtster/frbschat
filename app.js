@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Service Worker + Web Push (subscribe)
   // -----------------------
   // EDIT THIS: replace with your VAPID public key (base64url string)
-  const VAPID_PUBLIC_KEY = '<YOUR_VAPID_PUBLIC_KEY>';
+  const VAPID_PUBLIC_KEY = 'BAdYi2DwAr_u2endCUZda9Sth0jVH8e6ceuQXn0EQAl3ALEQCF5cDoEB9jfE8zOdOpHlu0gyu1pUYFrGpU5wEWQ';
 
   function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4)
