@@ -1,67 +1,71 @@
-// functions/send_test.js
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
-};
-
-// POST body: { keyName: "<KV key name>" } OR { endpoint: "..." }
-// If keyName supplied, it will fetch the subscription from KV first.
 export async function onRequest(context) {
-  const { env, request } = context;
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
-  if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
-  }
-
   try {
-    const body = await request.json();
-    let subscription = null;
+    const { request, env } = context;
+    const url = new URL(request.url);
 
-    if (body.keyName) {
-      const raw = await env.SUBSCRIBERS.get(body.keyName);
-      if (!raw) return new Response(JSON.stringify({ error: 'No such key in KV' }), { status: 404, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }});
-      subscription = JSON.parse(raw);
-    } else if (body.endpoint) {
-      subscription = { endpoint: body.endpoint };
-    } else {
-      return new Response(JSON.stringify({ error: 'Provide keyName or endpoint' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }});
+    // Accept GET ?key=... or POST { "keyName": "..." }
+    let keyName;
+    if (request.method === "GET") {
+      keyName = url.searchParams.get("key");
+    } else if (request.method === "POST") {
+      const { keyName: bodyKey } = await request.json();
+      keyName = bodyKey;
     }
 
-    // Attempt a raw POST (empty payload) to the subscription endpoint
-    const endpoint = subscription.endpoint;
-    if (!endpoint) return new Response(JSON.stringify({ error: 'Subscription missing endpoint' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }});
+    if (!keyName) {
+      return new Response(JSON.stringify({ error: "Missing keyName" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
-    // Some endpoints require content-length: 0 and TTL header
-    const resp = await fetch(endpoint, {
-      method: 'POST',
+    const subData = await env.SUBSCRIBERS.get(keyName);
+    if (!subData) {
+      return new Response(JSON.stringify({ error: "No subscription found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const parsed = JSON.parse(subData);
+    const subscription = parsed.subscription;
+    if (!subscription || !subscription.endpoint) {
+      return new Response(JSON.stringify({ error: "Subscription missing endpoint" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const endpoint = subscription.endpoint;
+
+    // Try sending an empty push
+    const pushRes = await fetch(endpoint, {
+      method: "POST",
       headers: {
-        'TTL': '60',
-        'Content-Length': '0'
-      },
-      // empty body
-      body: ''
+        "TTL": "60",
+        "Content-Length": "0"
+      }
     });
 
-    // Return information about the response to help debugging
-    const text = await safeText(resp);
-    return new Response(JSON.stringify({
-      status: resp.status,
-      statusText: resp.statusText,
-      headers: Object.fromEntries(resp.headers.entries()),
-      bodySnippet: text.slice(0, 200)
-    }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }});
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }});
-  }
-}
+    const bodyText = await pushRes.text();
 
-async function safeText(resp) {
-  try {
-    return await resp.text();
-  } catch (_) {
-    return '';
+    return new Response(
+      JSON.stringify(
+        {
+          endpoint,
+          status: pushRes.status,
+          headers: Object.fromEntries(pushRes.headers.entries()),
+          body: bodyText.slice(0, 500) // limit output
+        },
+        null,
+        2
+      ),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
