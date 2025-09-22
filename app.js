@@ -1,17 +1,10 @@
-// (BEGIN full app.js content - REPLACE your existing app.js with this exact content)
-
-// --- (first part of your original app.js identical to repo) ---
-/* your original app.js content up to nicknameSave handler is preserved exactly.
-   I will include the full script exactly as it was in your repo but with the two
-   small additions described in the message. */
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+// app.js - UI-focused Protocol Chat client
+// Keep the VAPID_PUBLIC_KEY matched to your worker keys
+import { db } from './firebase-config.js';
 import {
-  getDatabase,
   ref as dbRef,
   push as dbPush,
   set as dbSet,
-  onValue as dbOnValue,
   query as dbQuery,
   limitToLast,
   onChildAdded
@@ -51,7 +44,7 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 function isPWAStandalone() {
-  return (window.matchMedia && window.matchMedia('(display-mode: ... standalone)').matches) || window.navigator.standalone === true;
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 }
 
 // ---------- Service worker registration ----------
@@ -118,57 +111,204 @@ async function sendSubscriptionToServer(subscription) {
   }
 }
 
-// ---------- Firebase + messages (existing logic) ----------
-/* ... (rest of your original Firebase and messaging code) ... */
-
-/* Note: I will keep the entire original code structure intact. The only changes
-   are the two function calls shown below: one in the nickname save handler and
-   one in the enable notifications button click handler. */
-
-// ... (existing code continues) ...
-
-// --- IMPORTANT: below are the two small additions I added to integrate OneSignal ---
-// 1) After the existing code shows "Hello, <nickname>" we call onsignalLogin(nickname)
-// 2) When the user clicks the "Enable" button we call enableOneSignal() first,
-//    then continue with the existing subscribeToPush() flow as a fallback.
-
-// Find the place in your original file where nicknameSave handler exists and ensure it looks like this:
-const nicknameSave = document.getElementById('nicknameSave');
-const nicknameInput = document.getElementById('nicknameInput');
+// ---------- Firebase messaging ---------
+let messages = [];
 let nickname = localStorage.getItem('protocol_nickname') || '';
-nicknameSave.addEventListener('click', () => {
-  const val = (nicknameInput.value || '').trim();
-  if (!val) { showToast('Please enter a name'); return; }
-  nickname = val;
-  localStorage.setItem('protocol_nickname', nickname);
-  nicknameOverlay.style.display = 'none';
-  showToast('Hello, ' + nickname);
 
-  // === NEW: attach OneSignal external id so server can target this user ===
-  try { if (window.onsignalLogin) window.onsignalLogin(nickname); } catch(e) { /* ignore */ }
-});
+function formatTime(ts) {
+  try {
+    const d = new Date(Number(ts) || Date.now());
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '';
+  }
+}
 
-// Later in the same file where the enable button is wired:
-const enableNotifBtn = document.getElementById('enableNotifs');
-// "Enable" button
-enableNotifBtn.addEventListener('click', async () => {
-  // if not in PWA mode on iOS, request user to add to Home Screen first
-  if (!isPWAStandalone()) {
-    showToast('Add to Home Screen, then open from the Home Screen and tap Enable');
-    // still attempt to register service worker so browsers that allow it will show permission
-    await registerServiceWorker();
+function makeAvatarInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0,2).toUpperCase();
+}
+
+function renderMessages(container = document.getElementById('messages')) {
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const m of messages) {
+    const isMe = (m.user || '').trim() === (nickname || '').trim();
+
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + (isMe ? 'me' : 'other');
+
+    // For other messages: avatar + bubble; for me: bubble aligned right
+    if (!isMe) {
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'avatar';
+      avatarWrap.textContent = makeAvatarInitials(m.user || 'U');
+      row.appendChild(avatarWrap);
+    }
+
+    const content = document.createElement('div');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = m.message || '';
+
+    // If other user, show name above bubble
+    if (!isMe) {
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = m.user || 'Unknown';
+      content.appendChild(name);
+    }
+
+    content.appendChild(bubble);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = formatTime(m.ts);
+    content.appendChild(meta);
+
+    row.appendChild(content);
+    container.appendChild(row);
+  }
+
+  // scroll to bottom
+  setTimeout(() => {
+    try {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    } catch (e) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, 60);
+}
+
+function setupFirebaseListener() {
+  try {
+    const messagesRef = dbRef(db, 'protocol-messages');
+    const q = dbQuery(messagesRef, limitToLast(200));
+    onChildAdded(q, (snap) => {
+      const val = snap.val();
+      if (!val) return;
+      messages.push(val);
+      // keep only last 400 in-memory as a safeguard
+      if (messages.length > 400) messages = messages.slice(-400);
+      renderMessages();
+    });
+  } catch (err) {
+    showToast('Database listener error');
+  }
+}
+
+async function sendMessage(text) {
+  if (!text || !text.trim()) return;
+  const msg = { user: nickname || 'anonymous', message: text.trim(), ts: Date.now() };
+
+  // optimistic UI
+  messages.push(msg);
+  renderMessages();
+
+  try {
+    const ref = dbRef(db, 'protocol-messages');
+    const newRef = await dbPush(ref);
+    await dbSet(newRef, msg);
+  } catch (err) {
+    showToast('Message failed to send');
     return;
   }
 
-  // === NEW: trigger OneSignal prompt (if SDK loaded) then run existing subscribe flow ===
-  try { if (window.enableOneSignal) await window.enableOneSignal(); } catch (e) { /* ignore */ }
-  await subscribeToPush();
-});
+  // notify backend worker to broadcast push notifications
+  try {
+    await fetch(MESSAGES_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg)
+    });
+  } catch (err) {
+    // fail silently (server may be unreachable); no UI debug
+  }
+}
 
-// (the rest of your original file remains unchanged)
+// ---------- UI wiring ----------
 document.addEventListener('DOMContentLoaded', async () => {
-  // existing initialization code from your repo...
-  // attempt to register service worker and re-send subscription if present
+  const nicknameOverlay = document.getElementById('nicknameOverlay');
+  const nicknameInput = document.getElementById('nicknameInput');
+  const nicknameSave = document.getElementById('nicknameSave');
+  const sendForm = document.getElementById('sendForm');
+  const messageInput = document.getElementById('messageInput');
+  const enableNotifBtn = document.getElementById('enableNotifs');
+  const sendBtn = document.getElementById('sendBtn');
+
+  // Auto-resize textarea
+  function autoResize(el) {
+    el.style.height = 'auto';
+    const max = 160;
+    el.style.height = Math.min(el.scrollHeight, max) + 'px';
+  }
+  if (messageInput) messageInput.addEventListener('input', () => autoResize(messageInput));
+
+  // Save nickname handler
+  if (nicknameSave) {
+    nicknameSave.addEventListener('click', () => {
+      const val = (nicknameInput && nicknameInput.value || '').trim();
+      if (!val) { showToast('Please enter a name'); return; }
+      nickname = val;
+      localStorage.setItem('protocol_nickname', nickname);
+      if (nicknameOverlay) nicknameOverlay.style.display = 'none';
+      showToast('Hello, ' + nickname);
+
+      // === NEW: attach OneSignal external id so server can target this user ===
+      try { if (window.onsignalLogin) window.onsignalLogin(nickname); } catch(e) { /* ignore */ }
+    });
+  }
+
+  // Use overlay on first run if no nickname
+  if (!nickname) {
+    if (nicknameOverlay) {
+      nicknameOverlay.style.display = 'flex';
+      if (nicknameInput) nicknameInput.focus();
+    }
+  } else {
+    if (nicknameOverlay) nicknameOverlay.style.display = 'none';
+  }
+
+  // Send form (submit) or fallback to send button click
+  if (sendForm) {
+    sendForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = messageInput ? (messageInput.value || '') : '';
+      if (messageInput) { messageInput.value = ''; autoResize(messageInput); }
+      sendMessage(text);
+    });
+  } else if (sendBtn) {
+    sendBtn.addEventListener('click', () => {
+      const text = messageInput ? (messageInput.value || '') : '';
+      if (messageInput) { messageInput.value = ''; autoResize(messageInput); }
+      sendMessage(text);
+    });
+  }
+
+  // "Enable" button
+  if (enableNotifBtn) {
+    enableNotifBtn.addEventListener('click', async () => {
+      // if not in PWA mode on iOS, request user to add to Home Screen
+      if (!isPWAStandalone()) {
+        showToast('Add to Home Screen, then open from the Home Screen and tap Enable');
+        // still attempt to register service worker so browsers that allow it will show permission
+        await registerServiceWorker();
+        return;
+      }
+
+      // === NEW: trigger OneSignal prompt (if SDK loaded) then run existing subscribe flow ===
+      try { if (window.enableOneSignal) await window.enableOneSignal(); } catch (e) { /* ignore */ }
+      await subscribeToPush();
+    });
+  }
+
+  // Register SW early (does no UI debug)
+  await registerServiceWorker();
+
+  // If subscription is saved locally, try resending to server (helps iOS)
   try {
     const saved = localStorage.getItem('pushSubscription');
     if (saved) {
