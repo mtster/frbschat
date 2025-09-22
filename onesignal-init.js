@@ -1,59 +1,70 @@
-// onesignal-init.js
-// Put this in the root of your site and include it from index.html (see head snippet below).
-window.OneSignalDeferred = window.OneSignalDeferred || [];
-OneSignalDeferred.push(async function(OneSignal) {
-  try {
-    await OneSignal.init({
-      appId: "9df95e3e-85af-47ed-864f-d4ccba6468e4", // <<--- YOUR APP ID
-      allowLocalhostAsSecureOrigin: true, // keep true for local dev, harmless on prod
-      notifyButton: { enable: false } // we will show our own prompt or use slidedown
-      // If you store worker files not at root, add serviceWorkerPath here.
-    });
+// onesignal-init.js - put at the site root (https://frbschat.pages.dev/onesignal-init.js)
+// Initializes OneSignal and provides small helper functions used by app.js
 
-    // Optional: show a gentle slidedown prompt (call from UI when appropriate instead)
-    // OneSignal.Slidedown.prompt(); // call it on a user action
-
-    // Expose simple helpers to set/remove the logged-in app user (External ID)
-    // Call onsignalLogin(userId) after your user logs in.
-    window.onsignalLogin = async function(userId, authHash) {
-      // authHash only needed if you implemented identity verification on backend
-      if (!userId) return;
-      try {
-        if (authHash) {
-          // new user model expects OneSignal.login(externalId, authHash)
-          await OneSignal.login(String(userId), String(authHash));
-        } else {
-          await OneSignal.login(String(userId));
-        }
-        console.log("OneSignal: external id set", userId);
-      } catch (e) {
-        console.warn("OneSignal login error:", e);
-      }
-    };
-
-    // Call onsignalLogout() on your app logout to dissociate external id
-    window.onsignalLogout = async function() {
-      try {
-        await OneSignal.logout();
-        console.log("OneSignal: logged out");
-      } catch (e) {
-        console.warn("OneSignal logout error:", e);
-      }
-    };
-
-    // Optional: push notification click handler to deep-link to chat
-    OneSignal.on && OneSignal.on('notificationClick', function(event) {
-      try {
-        const data = event?.data || {};
-        if (data && data.chatId) {
-          // Example deep-link to your existing route handling:
-          window.location.href = "/?chatId=" + encodeURIComponent(data.chatId);
-        }
-      } catch (e) { /* noop */ }
-    });
-
-    console.log("OneSignal initialized");
-  } catch (err) {
-    console.error("OneSignal init failed:", err);
-  }
+window.OneSignal = window.OneSignal || [];
+OneSignal.push(function() {
+  OneSignal.init({
+    appId: "9df95e3e-85af-47ed-864f-d4ccba6468e4", // <<---- keep this unless your OneSignal App ID differs
+    allowLocalhostAsSecureOrigin: true,
+    notifyButton: { enable: false }
+  });
 });
+
+// Trigger OneSignal's slidedown/native prompt from UI
+window.enableOneSignal = async function() {
+  try {
+    if (!window.OneSignal) return;
+    // Use slidedown if available (recommended), otherwise attempt native prompt
+    if (OneSignal.Slidedown && OneSignal.Slidedown.prompt) {
+      OneSignal.Slidedown.prompt();
+      return;
+    }
+    if (OneSignal.showNativePrompt) {
+      OneSignal.showNativePrompt();
+      return;
+    }
+    if (OneSignal.registerForPushNotifications) {
+      OneSignal.registerForPushNotifications();
+      return;
+    }
+    console.warn('OneSignal prompt API not available yet.');
+  } catch (e) {
+    console.warn('enableOneSignal error', e);
+  }
+};
+
+// Attach an external id for this browser/device — used to target specific users from server
+window.onsignalLogin = async function(externalId) {
+  try {
+    if (!window.OneSignal) return;
+    // Try the modern method if available, else fallback
+    if (OneSignal.setExternalUserId) {
+      await OneSignal.setExternalUserId(String(externalId));
+    } else if (OneSignal.login) {
+      await OneSignal.login(String(externalId));
+    } else {
+      // fallback via push queue
+      OneSignal.push(function() {
+        OneSignal.setExternalUserId && OneSignal.setExternalUserId(String(externalId));
+      });
+    }
+    console.log('OneSignal: external id set', externalId);
+  } catch (e) {
+    console.warn('onsignalLogin error', e);
+  }
+};
+
+// Remove external id on logout (if you use logout)
+window.onsignalLogout = async function() {
+  try {
+    if (!window.OneSignal) return;
+    if (OneSignal.removeExternalUserId) {
+      await OneSignal.removeExternalUserId();
+    } else if (OneSignal.logout) {
+      await OneSignal.logout();
+    }
+    console.log('OneSignal: external id removed');
+  } catch (e) {
+    console.warn('onsignalLogout error', e);
+  }
+};
