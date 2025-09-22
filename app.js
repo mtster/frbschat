@@ -237,7 +237,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sendForm = document.getElementById('sendForm');
   const messageInput = document.getElementById('messageInput');
   const enableNotifBtn = document.getElementById('enableNotifs');
-  const sendBtn = document.getElementById('sendBtn');
 
   // Auto-resize textarea
   function autoResize(el) {
@@ -245,65 +244,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     const max = 160;
     el.style.height = Math.min(el.scrollHeight, max) + 'px';
   }
-  if (messageInput) messageInput.addEventListener('input', () => autoResize(messageInput));
+  messageInput.addEventListener('input', () => autoResize(messageInput));
 
   // Save nickname handler
-  if (nicknameSave) {
-    nicknameSave.addEventListener('click', () => {
-      const val = (nicknameInput && nicknameInput.value || '').trim();
-      if (!val) { showToast('Please enter a name'); return; }
-      nickname = val;
-      localStorage.setItem('protocol_nickname', nickname);
-      if (nicknameOverlay) nicknameOverlay.style.display = 'none';
-      showToast('Hello, ' + nickname);
-
-      // === NEW: attach OneSignal external id so server can target this user ===
-      try { if (window.onsignalLogin) window.onsignalLogin(nickname); } catch(e) { /* ignore */ }
-    });
-  }
+  nicknameSave.addEventListener('click', () => {
+    const val = (nicknameInput.value || '').trim();
+    if (!val) { showToast('Please enter a name'); return; }
+    nickname = val;
+    localStorage.setItem('protocol_nickname', nickname);
+    nicknameOverlay.style.display = 'none';
+    showToast('Hello, ' + nickname);
+  });
 
   // Use overlay on first run if no nickname
   if (!nickname) {
-    if (nicknameOverlay) {
-      nicknameOverlay.style.display = 'flex';
-      if (nicknameInput) nicknameInput.focus();
-    }
+    nicknameOverlay.style.display = 'flex';
+    nicknameInput.focus();
   } else {
-    if (nicknameOverlay) nicknameOverlay.style.display = 'none';
+    nicknameOverlay.style.display = 'none';
   }
 
-  // Send form (submit) or fallback to send button click
-  if (sendForm) {
-    sendForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = messageInput ? (messageInput.value || '') : '';
-      if (messageInput) { messageInput.value = ''; autoResize(messageInput); }
-      sendMessage(text);
-    });
-  } else if (sendBtn) {
-    sendBtn.addEventListener('click', () => {
-      const text = messageInput ? (messageInput.value || '') : '';
-      if (messageInput) { messageInput.value = ''; autoResize(messageInput); }
-      sendMessage(text);
-    });
-  }
+  // Send form
+  sendForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = messageInput.value || '';
+    messageInput.value = '';
+    autoResize(messageInput);
+    sendMessage(text);
+  });
 
   // "Enable" button
-  if (enableNotifBtn) {
-    enableNotifBtn.addEventListener('click', async () => {
-      // if not in PWA mode on iOS, request user to add to Home Screen
-      if (!isPWAStandalone()) {
-        showToast('Add to Home Screen, then open from the Home Screen and tap Enable');
-        // still attempt to register service worker so browsers that allow it will show permission
-        await registerServiceWorker();
-        return;
-      }
-
-      // === NEW: trigger OneSignal prompt (if SDK loaded) then run existing subscribe flow ===
-      try { if (window.enableOneSignal) await window.enableOneSignal(); } catch (e) { /* ignore */ }
-      await subscribeToPush();
-    });
-  }
+  enableNotifBtn.addEventListener('click', async () => {
+    // if not in PWA mode on iOS, request user to add to Home Screen
+    if (!isPWAStandalone()) {
+      showToast('Add to Home Screen, then open from the Home Screen and tap Enable');
+      // still attempt to register service worker so browsers that allow it will show permission
+      await registerServiceWorker();
+      return;
+    }
+    await subscribeToPush();
+  });
 
   // Register SW early (does no UI debug)
   await registerServiceWorker();
